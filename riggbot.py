@@ -33,6 +33,8 @@ TOKEN = bot_token()
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.reactions = True
+intents.messages = True
 
 client = discord.Client(intents=intents)
 
@@ -62,8 +64,7 @@ async def on_message(message):
     if message.author == client.user:  # ignore messages from the bot itself
         return
 
-    if 'latibot' in message.author.name.lower():
-        print("Searching for embeds...")
+    if 'latibot' in message.author.name.lower():        
         # multiple attempts to make sure it gets the embed
         embeds = None
         max_attempts = 5
@@ -82,20 +83,12 @@ async def on_message(message):
             if translated_text:
                 await message.reply(translated_text)
 
-    # Process any image attachments on the message
-    if message.attachments and 'riggoon' in message.author.name.lower():
-        image_urls = []
-        for att in message.attachments:
-            name = getattr(att, 'filename', '') or ''
-            if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
-                image_urls.append(att.url)
-        if image_urls:
-            try:
-                attached_translations = await translate_image_urls(image_urls)
-                if attached_translations:
-                    await message.reply('\n'.join(attached_translations))
-            except Exception as e:
-                print(f'Error processing attachments: {e}')
+    # If this message is a reply and contains the trigger phrase, process the referenced message
+    try:
+        if message.reference and message.content:
+            await handle_reply(message)
+    except Exception as e:
+        print(f'Error handling reply trigger: {e}')
 
     # triggered word responses
     if 'beer' in message.content.lower():
@@ -109,6 +102,12 @@ async def on_message(message):
 
     if 'one piece' in message.content.lower():
         await message.channel.send('THE ONE PIECE IS REAL! 🏴‍☠️')
+        
+    if 'it just works' in message.content.lower():
+        await message.channel.send('my old uncle ToddBot used to say that all the time...')
+        
+    if 'skyrim' in message.content.lower():
+        await message.channel.send('my old uncle ToddBot used to release that game all the time...')
 
     if 'david bot' in message.content.lower() or 'davidbot' in message.content.lower():
         await message.channel.send('thats not my name bitch')
@@ -128,6 +127,76 @@ async def on_message(message):
 
     return
 
+
+
+@client.event
+async def on_reaction_add(reaction, user):
+    print(reaction.emoji)
+    
+    try:
+        # ignore bot's own reactions and reactions to bot's message
+        if user == client.user or reaction.message.author == client.user:
+            return
+
+        if not reaction.emoji == '🏳️‍⚧️':
+            return
+
+        msg = reaction.message
+        collected = []
+        if msg.embeds:
+            emb_trans = await translate_embeds(msg.embeds)
+            if emb_trans:
+                collected.append(emb_trans)
+
+        if msg.attachments:
+            urls = []
+            for att in msg.attachments:
+                name = getattr(att, 'filename', '') or ''
+                if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
+                    urls.append(att.url)
+            if urls:
+                img_trans = await translate_image_urls(urls)
+                if img_trans:
+                    collected.extend(img_trans)
+
+        if collected:
+            # reply to the message that was reacted to
+            await msg.reply('\n'.join(collected))
+    except Exception as e:
+        print(f'Error handling reaction trigger: {e}')
+
+
+async def handle_reply(message):
+    msg_content = message.content.lower()
+    if 'trans' in msg_content and 'riggbot' in msg_content:
+        ref_msg = None
+        # message.reference may contain resolved message or just ids
+        if getattr(message.reference, 'resolved', None):
+            ref_msg = message.reference.resolved
+        elif getattr(message.reference, 'message_id', None):
+            ref_msg = await message.channel.fetch_message(message.reference.message_id)
+
+        if ref_msg:
+            translated = []
+            if ref_msg.embeds:
+                emb_trans = await translate_embeds(ref_msg.embeds)
+                if emb_trans:
+                    translated.append(emb_trans)
+            if ref_msg.attachments:
+                urls = []
+                for attachment in ref_msg.attachments:
+                    name = getattr(attachment, 'filename', '') or ''
+                    if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
+                        urls.append(attachment.url)
+                if urls:
+                    img_trans = await translate_image_urls(urls)
+                    if img_trans:
+                        translated.extend(img_trans)
+
+            if translated:
+                await ref_msg.reply('\n'.join(translated))
+            else:
+                await ref_msg.reply('Sorry, I can\'t find anything to translate in that')
 
 # handles translation of embed descriptions and images
 async def translate_embeds(embeds) -> str:
@@ -196,7 +265,7 @@ async def translate_image_urls(image_urls) -> list:
                 if detected.lang != 'en':  # double checking for English
                     translated = await translator.translate(formatted_text, dest_language='en')
                     results.append(
-                        f"🖼️ Img {imgx} ({detected.lang}→en): {translated.text}")
+                        f"🖼️ Img {imgx} ({detected.lang}→en): {translated.text}\nOCR Detected: {formatted_text}")
                     print(f'Img {imgx} translated text: {translated.text}')
             else:
                 print(f'No text found in image {imgx}')
