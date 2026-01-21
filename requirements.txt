@@ -1,0 +1,10 @@
+# requirements for Riggbot.py
+# Detected third-party imports: easyocr, googletrans, discord
+
+easyocr
+googletrans==4.0.0-rc1
+discord.py
+
+# Notes:
+# - EasyOCR requires a backend (PyTorch). Install a matching torch/cuda build from https://pytorch.org/ if needed.
+# - If you hit image handling issues, also install Pillow: pillow
