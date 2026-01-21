@@ -124,12 +124,12 @@ def init_bot(use_gpu: bool = False, langs: list | None = None):
 # English, Spanish, French, German, Russian, Japanese, Chinese (Simplified only)
 
 
-@client.event
+@discord.Client.event
 async def on_ready():
     logging.info(f'{client.user} is online')
 
 
-@client.event
+@discord.Client.event
 async def on_message(message):
     if message.author == client.user:  # ignore messages from the bot itself
         return
@@ -201,7 +201,7 @@ async def on_message(message):
 
 
 
-@client.event
+@discord.Client.event
 async def on_reaction_add(reaction, user):
     
     try:
