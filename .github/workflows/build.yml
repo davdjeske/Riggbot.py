@@ -61,5 +61,5 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: riggbot-build
+          name: riggbot-build-${{ matrix.os }}-${{ matrix.python-version }}
           path: riggbot-build.zip
