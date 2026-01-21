@@ -78,8 +78,8 @@ async def on_message(message):
                 await asyncio.sleep(delay)
 
         if embeds:
-            translated_text = await translate_embeds(embeds)
-            print(f'Sending translations:\n{translated_text}')
+            translated_text = await translate_embeds(embeds, is_manual=False)
+            print(f'Sending translations: {translated_text}' if translated_text else "")
             if translated_text:
                 await message.reply(translated_text)
 
@@ -131,9 +131,12 @@ async def on_message(message):
 
 @client.event
 async def on_reaction_add(reaction, user):
-    print(reaction.emoji)
     
     try:
+        # star recognition 
+        if reaction.message.author == client.user and reaction.emoji =='⭐' and reaction.count == 1:
+            await reaction.message.channel.send('omg thank you so much')
+        
         # ignore bot's own reactions and reactions to bot's message
         if user == client.user or reaction.message.author == client.user:
             return
@@ -141,10 +144,13 @@ async def on_reaction_add(reaction, user):
         if not reaction.emoji == '🏳️‍⚧️':
             return
 
+        if not reaction.count == 1:
+            return
+
         msg = reaction.message
         collected = []
         if msg.embeds:
-            emb_trans = await translate_embeds(msg.embeds)
+            emb_trans = await translate_embeds(msg.embeds, is_manual=True)
             if emb_trans:
                 collected.append(emb_trans)
 
@@ -155,13 +161,13 @@ async def on_reaction_add(reaction, user):
                 if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
                     urls.append(att.url)
             if urls:
-                img_trans = await translate_image_urls(urls)
+                img_trans = await translate_image_urls(urls, is_manual=True)
                 if img_trans:
                     collected.extend(img_trans)
 
         if collected:
             # reply to the message that was reacted to
-            await msg.reply('\n'.join(collected))
+            await msg.reply('\n'.join(collected), silent=True)
     except Exception as e:
         print(f'Error handling reaction trigger: {e}')
 
@@ -179,7 +185,7 @@ async def handle_reply(message):
         if ref_msg:
             translated = []
             if ref_msg.embeds:
-                emb_trans = await translate_embeds(ref_msg.embeds)
+                emb_trans = await translate_embeds(ref_msg.embeds, is_manual=True)
                 if emb_trans:
                     translated.append(emb_trans)
             if ref_msg.attachments:
@@ -189,17 +195,17 @@ async def handle_reply(message):
                     if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
                         urls.append(attachment.url)
                 if urls:
-                    img_trans = await translate_image_urls(urls)
+                    img_trans = await translate_image_urls(urls, is_manual=True)
                     if img_trans:
                         translated.extend(img_trans)
 
             if translated:
-                await ref_msg.reply('\n'.join(translated))
+                await ref_msg.reply('\n'.join(translated), silent=True)
             else:
-                await ref_msg.reply('Sorry, I can\'t find anything to translate in that')
+                await ref_msg.reply('Sorry, I can\'t find anything to translate in that', silent=True)
 
 # handles translation of embed descriptions and images
-async def translate_embeds(embeds) -> str:
+async def translate_embeds(embeds, is_manual) -> str:
     description = embeds[0].to_dict()["description"].split('\n\n')[0]
     # splits on '/n/n' due to fxtwitter's formatting convention (separates the view, likes, etc.)
 
@@ -209,8 +215,13 @@ async def translate_embeds(embeds) -> str:
         # starting with '**[💬]' means there was no description (just the views, likes, etc.)
         print(f'Raw embed description: {description}')
         detected = await translator.detect(description)
-        if detected.lang != 'en':
-            translated = await translator.translate(description, dest_language='en')
+        if is_manual and detected.lang == 'en':
+            print('Manual trigger: translating description from English to Chinese')
+            translated = await translator.translate(description, dest='zh-CN')
+            translations.append(translated.text)
+            print(f'Description translated from {detected.lang}')
+        elif detected.lang != 'en': 
+            translated = await translator.translate(description, dest='en')
             translations.append(f"📄 {detected.lang}→en: {translated.text}")
             print(f'Description translated from {detected.lang}')
 
@@ -223,7 +234,7 @@ async def translate_embeds(embeds) -> str:
             images.append(embed_data['image']['url'])
         # Process each image
         if images:
-            img_trans = await translate_image_urls(images)
+            img_trans = await translate_image_urls(images, is_manual)
             if img_trans:
                 translations.extend(img_trans)
 
@@ -236,9 +247,9 @@ async def translate_embeds(embeds) -> str:
         return
 
 
-# run OCR readers on each image URL and return a list of translateds strings (if any).
-async def translate_image_urls(image_urls) -> list:
-    results = []
+# run OCR readers on each image URL and return a list of translated strings (if any).
+async def translate_image_urls(image_urls, is_manual) -> list:
+    translations = []
     for imgx, image_url in enumerate(image_urls, 1):
         print(f'Processing image {imgx} from provided URLs')
         try:
@@ -257,21 +268,28 @@ async def translate_image_urls(image_urls) -> list:
                     if formatted_text.strip() and detected.lang in specialized_readers.keys():
                         break
 
-            if formatted_text.strip():
-                detected = await translator.detect(formatted_text)
-                print(
-                    f'OCR extracted from image {imgx}: "{formatted_text}" (detected lang: {detected.lang})')
-
-                if detected.lang != 'en':  # double checking for English
-                    translated = await translator.translate(formatted_text, dest_language='en')
-                    results.append(
-                        f"🖼️ Img {imgx} ({detected.lang}→en): {translated.text}\nOCR Detected: {formatted_text}")
-                    print(f'Img {imgx} translated text: {translated.text}')
-            else:
+            if not formatted_text.strip():
                 print(f'No text found in image {imgx}')
+                continue
+
+            # detect language once
+            detected = await translator.detect(formatted_text)
+            print(f'OCR extracted from image {imgx}: "{formatted_text}" (detected lang: {detected.lang})')
+
+            if is_manual and detected.lang == 'en':
+                print(f'Manual trigger: translating image {imgx} text from English to Chinese')
+                translated = await translator.translate(formatted_text, dest='zh-CN')
+                translations.append(translated.text)
+                print(f'Img {imgx} translated text: {translated.text}')
+            elif detected.lang != 'en':
+                translated = await translator.translate(formatted_text, dest='en')
+                translations.append(f"🖼️ Img {imgx} ({detected.lang}→en): {translated.text}\nOCR Detected: {formatted_text}")
+                print(f'Img {imgx} translated text: {translated.text}')
+            else:
+                print(f'Image {imgx} text is already English; skipping translation.')
         except Exception as e:
             print(f'Error processing image {imgx}: {e}')
-    return results
+    return translations
 
 
 # formatting OCR output text (this is AI generated and needs to be reviewed more)
