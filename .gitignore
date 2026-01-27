@@ -1,2 +1,5 @@
+
 riggbot token.txt
 .venv
+.env
+__pycache__/

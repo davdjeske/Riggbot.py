@@ -1,78 +1,66 @@
-import sys
-import time
-import re
-import os
-import logging
-from pathlib import Path
-import discord
 import asyncio
+import sys
+import discord
+import logging
+import os
+from dotenv import load_dotenv
 
-from googletrans import Translator
+# Load .env variables at the top
+load_dotenv()
+
+# Ensure `Translator` symbol exists at module import time so frozen builds
+# can reference the class and PyInstaller will detect the dependency when
+# googletrans is available in the environment.
+try:
+    from googletrans import Translator
+except Exception:
+    Translator = None
 
 
-def bot_token(token_file: str = 'riggbot token.txt') -> str:
-    """Get bot token. Order of precedence:
-    1. RIGGBOT_TOKEN environment variable
-    2. token file (either raw token or 'token=VALUE')
 
-    Raises ValueError/FileNotFoundError on missing/invalid token.
-    """
-    env = os.getenv('RIGGBOT_TOKEN')
-    if env:
-        logging.info('Loaded token from RIGGBOT_TOKEN env var')
-        return env.strip()
-
-    token_path = Path(token_file)
-    if not token_path.exists():
-        raise FileNotFoundError(
-            "Token file not found. Please create 'riggbot token.txt' with your bot token.")
-
-    content = token_path.read_text().strip()
-    if not content:
-        raise ValueError(
-            "Token file is empty. Please add your bot token to 'riggbot token.txt'.")
-
-    # Accept either 'token=VALUE' or raw token
-    if '=' in content:
-        key, val = content.split('=', 1)
-        if key.strip().lower() == 'token' and val.strip():
-            logging.info('Loaded token from token file (key=value)')
-            return val.strip()
-        else:
-            raise ValueError("Token file format is incorrect. Use 'token=BOT_TOKEN' or raw token.")
-    else:
-        logging.info('Loaded token from token file (raw)')
-        return content
 
 
 # Globals that will be initialized by `init_bot()` or `run_bot()`.
 TOKEN = None
+EMBED_BOT_NAME = None
+DEST_LANG = None
+MANUAL_OVERRIDE_LANG = None
 client: discord.Client | None = None
-translator: Translator | None = None
-reader = None
-reader_ru = None
-reader_ja = None
-reader_zh = None
-specialized_readers = {}
+translator = None
 
 
 def init_logging():
     logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
-def init_bot(use_gpu: bool = False, langs: list | None = None):
-    """Initialize global bot dependencies (discord client, translator, OCR readers).
+def init_bot():
+    """Initialize global bot dependencies (discord client, translator).
 
     Call this from CI setup or before `run_bot()` to configure the runtime without starting the client.
     """
-    global client, translator, reader, reader_ru, reader_ja, reader_zh, specialized_readers
+    global client, translator
 
     intents = discord.Intents.default()
     intents.message_content = True
     intents.reactions = True
     intents.messages = True
 
+    logging.debug(f'Using intents: {intents}')
+
     client = discord.Client(intents=intents)
+    try:
+        client.event(on_ready)
+        logging.info('Registered on_ready handler (event)')
+        client.event(on_message)
+        logging.info('Registered on_message handler (event)')
+        client.event(on_reaction_add)
+        logging.info('Registered on_reaction_add handler (event)')
+    except Exception as e:
+        # If handlers are not yet defined at init time, log the exception for visibility
+        logging.exception(f'Error registering listeners: {e}')
 
     # Initialize translator (googletrans) if available, else use a dummy async-compatible translator
     try:
@@ -92,49 +80,21 @@ def init_bot(use_gpu: bool = False, langs: list | None = None):
                 return type('R', (), {'text': text})()
 
         translator = _DummyTranslator()
-        logging.info('Dummy translator initialized (googletrans not available)')
-
-    # Initialize easyocr readers if easyocr is installed; otherwise use dummy readers
-    try:
-        import easyocr as _easyocr
-    except Exception:
-        _easyocr = None
-
-    langs = langs or ['en', 'es', 'fr', 'de']
-    if _easyocr:
-        reader = _easyocr.Reader(langs, gpu=use_gpu)
-        reader_ru = _easyocr.Reader(['ru', 'en'], gpu=use_gpu)
-        reader_ja = _easyocr.Reader(['ja', 'en'], gpu=use_gpu)
-        reader_zh = _easyocr.Reader(['ch_sim', 'en'], gpu=use_gpu)
-        specialized_readers = {
-            'ru': reader_ru,
-            'ja': reader_ja,
-            'zh-CN': reader_zh
-        }
-        logging.info('EasyOCR readers initialized')
-    else:
-        class _DummyReader:
-            def readtext(self, *_args, **_kwargs):
-                return []
-
-        reader = reader_ru = reader_ja = reader_zh = _DummyReader()
-        specialized_readers = {'ru': reader_ru, 'ja': reader_ja, 'zh-CN': reader_zh}
-        logging.info('Dummy OCR readers initialized (easyocr not available)')
-# total of 7 languages supported by easyocr
-# English, Spanish, French, German, Russian, Japanese, Chinese (Simplified only)
+        logging.info(
+            'Dummy translator initialized (googletrans not available)')
 
 
-@discord.Client.event
 async def on_ready():
     logging.info(f'{client.user} is online')
 
 
-@discord.Client.event
 async def on_message(message):
     if message.author == client.user:  # ignore messages from the bot itself
         return
 
-    if 'latibot' in message.author.name.lower():        
+    # TODO: refine filtering and avoid processing non-relevant messages
+
+    if EMBED_BOT_NAME in message.author.name.lower():
         # multiple attempts to make sure it gets the embed
         embeds = None
         max_attempts = 5
@@ -173,10 +133,10 @@ async def on_message(message):
 
     if 'one piece' in message.content.lower():
         await message.channel.send('THE ONE PIECE IS REAL! 🏴‍☠️')
-        
+
     if 'it just works' in message.content.lower():
         await message.channel.send('my old uncle ToddBot used to say that all the time...')
-        
+
     if 'skyrim' in message.content.lower():
         await message.channel.send('my old uncle ToddBot used to release that game all the time...')
 
@@ -200,12 +160,9 @@ async def on_message(message):
     return
 
 
-
-@discord.Client.event
 async def on_reaction_add(reaction, user):
-    
     try:
-        # star recognition 
+        # star recognition
         if reaction.message.author == client.user and reaction.emoji == '⭐' and reaction.count == 1:
             await reaction.message.channel.send('omg thank you so much')
 
@@ -225,18 +182,16 @@ async def on_reaction_add(reaction, user):
             emb_trans = await translate_embeds(msg.embeds, is_manual=True)
             if emb_trans:
                 collected.append(emb_trans)
-
-        if msg.attachments:
-            urls = []
-            for att in msg.attachments:
-                name = getattr(att, 'filename', '') or ''
-                if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
-                    urls.append(att.url)
-            if urls:
-                img_trans = await translate_image_urls(urls, is_manual=True)
-                if img_trans:
-                    collected.extend(img_trans)
-
+        elif msg.content:
+            detected = await translator.detect(msg.content)
+            if detected.lang == DEST_LANG:
+                logging.info(f'Manual trigger: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
+                translated = await translator.translate(msg.content, dest=MANUAL_OVERRIDE_LANG)
+                collected.append(translated.text)
+            elif detected.lang != DEST_LANG:
+                translated = await translator.translate(msg.content, dest=DEST_LANG)
+                translation = f"📝 {detected.lang}→{DEST_LANG}: {translated.text}"
+                collected.append(translation)
         if collected:
             # reply to the message that was reacted to
             await msg.reply('\n'.join(collected), silent=True)
@@ -246,7 +201,7 @@ async def on_reaction_add(reaction, user):
 
 async def handle_reply(message):
     msg_content = message.content.lower()
-    if 'trans' in msg_content and 'riggbot' in msg_content:
+    if 'trans' in msg_content:
         ref_msg = None
         # message.reference may contain resolved message or just ids
         if getattr(message.reference, 'resolved', None):
@@ -254,150 +209,100 @@ async def handle_reply(message):
         elif getattr(message.reference, 'message_id', None):
             ref_msg = await message.channel.fetch_message(message.reference.message_id)
 
-            if ref_msg:
-                translated = []
+        if ref_msg:
+            translations = []
             if ref_msg.embeds:
                 emb_trans = await translate_embeds(ref_msg.embeds, is_manual=True)
                 if emb_trans:
-                    translated.append(emb_trans)
-            if ref_msg.attachments:
-                urls = []
-                for attachment in ref_msg.attachments:
-                    name = getattr(attachment, 'filename', '') or ''
-                    if name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff')):
-                        urls.append(attachment.url)
-                if urls:
-                    img_trans = await translate_image_urls(urls, is_manual=True)
-                    if img_trans:
-                        translated.extend(img_trans)
+                    translations.append(emb_trans)
+            elif ref_msg.content:
+                detected = await translator.detect(ref_msg.content)
+                if detected.lang == DEST_LANG:
+                    logging.info(f'Manual trigger: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')                        
+                    translated = await translator.translate(ref_msg.content, dest=MANUAL_OVERRIDE_LANG)
+                    translations.append(translated.text)
+                elif detected.lang != DEST_LANG:
+                    translated = await translator.translate(ref_msg.content, dest=DEST_LANG)
+                    translation = f"📝 {detected.lang}→{DEST_LANG}: {translated.text}"
+                    translations.append(translation)
 
-            if translated:
-                await ref_msg.reply('\n'.join(translated), silent=True)
+            if translations:
+                await ref_msg.reply('\n'.join(translations), silent=True)
             else:
                 await ref_msg.reply('Sorry, I can\'t find anything to translate in that', silent=True)
 
-# handles translation of embed descriptions and images
+
+# translates the description and images in the embed(s)
 async def translate_embeds(embeds, is_manual) -> str:
-    description = embeds[0].to_dict().get("description", "")
+    description = embeds[0].to_dict().get("description")
     if description:
         description = description.split('\n\n')[0]
     # splits on '/n/n' due to fxtwitter's formatting convention (separates the view, likes, etc.)
 
-    translations = []
+    translation = None
     # Process description if found
     if description and not description.startswith("**[💬]"):
         # starting with '**[💬]' means there was no description (just the views, likes, etc.)
         logging.debug(f'Raw embed description: {description}')
         detected = await translator.detect(description)
-        if is_manual and detected.lang == 'en':
-            print('Manual trigger: translating description from English to Chinese')
-            translated = await translator.translate(description, dest='zh-CN')
-            translations.append(translated.text)
+        if is_manual and detected.lang == DEST_LANG:
+            logging.info(f'Manual trigger: translating description from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
+            translated = await translator.translate(description, dest=MANUAL_OVERRIDE_LANG)
+            translation = translated.text
             logging.info(f'Description translated from {detected.lang}')
-        elif detected.lang != 'en': 
-            translated = await translator.translate(description, dest='en')
-            translations.append(f"📄 {detected.lang}→en: {translated.text}")
-            print(f'Description translated from {detected.lang}')
+        elif detected.lang != DEST_LANG:
+            translated = await translator.translate(description, dest=DEST_LANG)
+            translation = f"📄 {detected.lang}→{DEST_LANG}: {translated.text}"
+            logging.info(f'Description translated from {detected.lang}')
 
-    # Processing any images in the embed
-    if embeds:
-        embed_data = embeds[0].to_dict()
-        images = []
-        # Collect all image URLs from embed
-        if 'image' in embed_data and embed_data['image']:
-            images.append(embed_data['image']['url'])
-        # Process each image
-        if images:
-            img_trans = await translate_image_urls(images, is_manual)
-            if img_trans:
-                translations.extend(img_trans)
-
-    # Send all translations in one message
-    if translations:
-        final_message = '\n'.join(translations)
-        return final_message
+   
+    if translation:
+        return translation
     else:
-        logging.debug('No translations to send')
+        logging.debug('No translation to send')
         return
 
 
-# run OCR readers on each image URL and return a list of translated strings (if any).
-async def translate_image_urls(image_urls, is_manual) -> list:
-    translations = []
-    for imgx, image_url in enumerate(image_urls, 1):
-        logging.debug(f'Processing image {imgx} from provided URLs')
-        try:
-            extracted_text = reader.readtext(image_url)
-            formatted_text = format_ocr_text(
-                "\n".join([item[1] for item in extracted_text]))
-            detected = await translator.detect(formatted_text)
-            if not formatted_text.strip() or (
-                    detected.lang != 'en' and detected.lang != 'es' and detected.lang != 'fr' and detected.lang != 'de'):
-                # if no text found or detected language is not in primary reader languages, try specialized readers
-                for spec_reader in specialized_readers.values():
-                    extracted_text = spec_reader.readtext(image_url)
-                    formatted_text = format_ocr_text(
-                        "\n".join([item[1] for item in extracted_text]))
-                    detected = await translator.detect(formatted_text)
-                    if formatted_text.strip() and detected.lang in specialized_readers.keys():
-                        break
-
-            if not formatted_text.strip():
-                logging.debug(f'No text found in image {imgx}')
-                continue
-
-            # detect language once
-            detected = await translator.detect(formatted_text)
-            logging.debug(f'OCR extracted from image {imgx}: "{formatted_text}" (detected lang: {detected.lang})')
-
-            if is_manual and detected.lang == 'en':
-                logging.info(f'Manual trigger: translating image {imgx} text from English to Chinese')
-                translated = await translator.translate(formatted_text, dest='zh-CN')
-                translations.append(translated.text)
-                logging.info(f'Img {imgx} translated text: {translated.text}')
-            elif detected.lang != 'en':
-                translated = await translator.translate(formatted_text, dest='en')
-                translations.append(f"🖼️ Img {imgx} ({detected.lang}→en): {translated.text}\nOCR Detected: {formatted_text}")
-                logging.info(f'Img {imgx} translated text: {translated.text}')
-            else:
-                logging.debug(f'Image {imgx} text is already English; skipping translation.')
-        except Exception as e:
-            logging.exception(f'Error processing image {imgx}: {e}')
-    return translations
-
-
-# formatting OCR output text (this is AI generated and needs to be reviewed more)
-def format_ocr_text(text):
-    # Split into lines, strip whitespace, remove empty lines
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    # Remove duplicate lines while preserving order
-    seen = set()
-    unique_lines = []
-    for line in lines:
-        if line not in seen:
-            unique_lines.append(line)
-            seen.add(line)
-    # Join lines into a single string, separated by spaces
-    formatted = ' '.join(unique_lines)
-    return formatted
-
-
-def run_bot(token: str | None = None, token_file: str = 'riggbot token.txt', use_gpu: bool = False):
-    """Initialize and run the bot. For CI, call `init_bot()` and avoid calling `run_bot()`.
-
-    If `token` is None, this looks for the `RIGGBOT_TOKEN` env var, then `token_file`.
-    """
-    global TOKEN
+def run_bot():
+    #Initialize and run the bot. For CI, call `init_bot()` and avoid calling `run_bot()`.
     init_logging()
-    init_bot(use_gpu=use_gpu)
-    TOKEN = token or bot_token(token_file)
+    init_bot()
+    # set module-level globals so event handlers can access them
+    global TOKEN, EMBED_BOT_NAME, DEST_LANG, MANUAL_OVERRIDE_LANG
+
+    TOKEN = bot_token()
     if not TOKEN:
         raise ValueError('No token provided to run the bot')
+
+    EMBED_BOT_NAME = os.getenv('EMBED_BOT_NAME', '') or ''
+    EMBED_BOT_NAME = EMBED_BOT_NAME.lower()
+    DEST_LANG = os.getenv('DEST_LANG', 'en') or 'en'
+    MANUAL_OVERRIDE_LANG = os.getenv('MANUAL_OVERRIDE_LANG', 'zh-CN') or 'zh-CN'
+
+    
+    logging.info(f'Embed bot name filter: "{EMBED_BOT_NAME}"')
+    logging.info(f'Default destination language: {DEST_LANG}')
+    logging.info(f'Manual override language: {MANUAL_OVERRIDE_LANG}')
 
     logging.info('Starting Discord client...')
     client.run(TOKEN)
 
+# Load bot token from .env file (own function for better error handling)
+def bot_token() -> str:
+    # load variables from a local .env into the environment
+    token = os.getenv('RIGGBOT_TOKEN')
+
+    if token and str(token).strip():
+        logging.info('Loaded token from .env')
+        return str(token).strip()
+
+    # Nothing found — provide a helpful error message
+    raise FileNotFoundError(
+        "No RIGGBOT_TOKEN found in .env.\n"
+        "Create a .env file in the project root with the line:\n"
+        "RIGGBOT_TOKEN=your_bot_token_here\n"
+        "Only .env format is supported for token ingestion.")
+
 
 if __name__ == '__main__':
-    # Run using env var or token file when executed directly.
     run_bot()
