@@ -6,4 +6,4 @@ discord.py>=2.2.0
 python-dotenv
 
 # Optional
-# PyInstaller (needed to build the exe): pip install pyinstaller
+pyinstaller>=5.11

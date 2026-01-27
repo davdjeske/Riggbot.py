@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import discord
 import logging
 import os
@@ -70,7 +69,7 @@ def init_bot():
 
     if _TranslatorCls:
         translator = _TranslatorCls()
-        logging.info('Translator initialized.')
+        logging.info('Translator initialized. (googletrans available)')
     else:
         class _DummyTranslator:
             async def detect(self, text):
@@ -91,6 +90,9 @@ async def on_ready():
 async def on_message(message):
     if message.author == client.user:  # ignore messages from the bot itself
         return
+    
+    if message.webhook_id is not None:
+        return
 
     # TODO: refine filtering and avoid processing non-relevant messages
 
@@ -108,15 +110,16 @@ async def on_message(message):
                 await asyncio.sleep(delay)
 
         if embeds:
-            translated_text = await translate_embeds(embeds, is_manual=False)
+            translated_text = translate_embeds(embeds, is_manual=False)
             if translated_text:
                 logging.info('Sending translations')
             if translated_text:
                 await message.reply(translated_text)
 
-    # If this message is a reply and contains the trigger phrase, process the referenced message
+
+    # If this message is a reply and contains the content trigger, handle it
     try:
-        if message.reference and message.content:
+        if message.type == discord.MessageType.reply and message.content:
             await handle_reply(message)
     except Exception as e:
         logging.exception(f'Error handling reply trigger: {e}')
@@ -179,17 +182,17 @@ async def on_reaction_add(reaction, user):
         msg = reaction.message
         collected = []
         if msg.embeds:
-            emb_trans = await translate_embeds(msg.embeds, is_manual=True)
+            emb_trans = translate_embeds(msg.embeds, is_manual=True)
             if emb_trans:
                 collected.append(emb_trans)
         elif msg.content:
-            detected = await translator.detect(msg.content)
+            detected = translator.detect(msg.content)
             if detected.lang == DEST_LANG:
                 logging.info(f'Manual trigger: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
-                translated = await translator.translate(msg.content, dest=MANUAL_OVERRIDE_LANG)
+                translated = translator.translate(msg.content, dest=MANUAL_OVERRIDE_LANG)
                 collected.append(translated.text)
             elif detected.lang != DEST_LANG:
-                translated = await translator.translate(msg.content, dest=DEST_LANG)
+                translated = translator.translate(msg.content, dest=DEST_LANG)
                 translation = f"📝 {detected.lang}→{DEST_LANG}: {translated.text}"
                 collected.append(translation)
         if collected:
@@ -212,17 +215,17 @@ async def handle_reply(message):
         if ref_msg:
             translations = []
             if ref_msg.embeds:
-                emb_trans = await translate_embeds(ref_msg.embeds, is_manual=True)
+                emb_trans = translate_embeds(ref_msg.embeds, is_manual=True)
                 if emb_trans:
                     translations.append(emb_trans)
             elif ref_msg.content:
-                detected = await translator.detect(ref_msg.content)
+                detected = translator.detect(ref_msg.content)
                 if detected.lang == DEST_LANG:
                     logging.info(f'Manual trigger: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')                        
-                    translated = await translator.translate(ref_msg.content, dest=MANUAL_OVERRIDE_LANG)
+                    translated = translator.translate(ref_msg.content, dest=MANUAL_OVERRIDE_LANG)
                     translations.append(translated.text)
                 elif detected.lang != DEST_LANG:
-                    translated = await translator.translate(ref_msg.content, dest=DEST_LANG)
+                    translated = translator.translate(ref_msg.content, dest=DEST_LANG)
                     translation = f"📝 {detected.lang}→{DEST_LANG}: {translated.text}"
                     translations.append(translation)
 
@@ -233,7 +236,7 @@ async def handle_reply(message):
 
 
 # translates the description and images in the embed(s)
-async def translate_embeds(embeds, is_manual) -> str:
+def translate_embeds(embeds, is_manual) -> str:
     description = embeds[0].to_dict().get("description")
     if description:
         description = description.split('\n\n')[0]
@@ -244,14 +247,14 @@ async def translate_embeds(embeds, is_manual) -> str:
     if description and not description.startswith("**[💬]"):
         # starting with '**[💬]' means there was no description (just the views, likes, etc.)
         logging.debug(f'Raw embed description: {description}')
-        detected = await translator.detect(description)
+        detected = translator.detect(description)
         if is_manual and detected.lang == DEST_LANG:
             logging.info(f'Manual trigger: translating description from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
-            translated = await translator.translate(description, dest=MANUAL_OVERRIDE_LANG)
+            translated = translator.translate(description, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
             logging.info(f'Description translated from {detected.lang}')
         elif detected.lang != DEST_LANG:
-            translated = await translator.translate(description, dest=DEST_LANG)
+            translated = translator.translate(description, dest=DEST_LANG)
             translation = f"📄 {detected.lang}→{DEST_LANG}: {translated.text}"
             logging.info(f'Description translated from {detected.lang}')
 

@@ -3,3 +3,4 @@ riggbot token.txt
 .venv
 .env
 __pycache__/
+.build/
