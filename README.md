@@ -37,5 +37,4 @@ This project includes a `riggbot.spec` to build with PyInstaller. Example:
 
 - Do not commit `.env` (it is gitignored). Keep your token secret.
 - If the bundled exe fails to initialize `c10.dll` (PyTorch), ensure the Visual C++ Redistributable is installed, or include the CRT DLLs in the PyInstaller spec (see `riggbot.spec`).
-- Optional features (OCR via `easyocr`) may require additional heavy deps such as `torch` — see `requirements.txt` comments.
 
