@@ -157,7 +157,7 @@ async def handle_reply(message):
     if message.author == client.user:
         return
     ref_msg = None
-        # message.reference may contain resolved message or just ids
+    # message.reference may contain resolved message or just ids
     if getattr(message.reference, 'resolved', None):
         ref_msg = message.reference.resolved
     elif getattr(message.reference, 'message_id', None):
@@ -173,7 +173,7 @@ async def handle_reply(message):
             await handle_message(ref_msg, is_manual=True)
             logging.info('Handled manual translation trigger from reply')
 
-    if '@riggbot is this true' in msg_content:
+    if 'riggbot is this true' in msg_content or '<@1293252648803237899> is this true' in msg_content:
         logging.info('Truth check trigger detected in reply')
         if ref_msg and not ref_msg.author == client.user:
             await message.reply('TODO: create truth check logic and responses', silent=True)
@@ -218,9 +218,10 @@ async def translate_embed(embed, is_manual: bool) -> str | None:
         # regex split to get text around 'quoted' seperater and post's metadata (views, likes, etc.)
         text_blobs = re.split(r"\W*\*\*\[.*\*\*\W*", description)
         logging.info(f'Raw Description Text Blobs: {text_blobs}')
-        
+
         if ''.join(text_blobs).strip() == '':
-            logging.info('Description text blobs are empty after stripping, skipping translation')
+            logging.info(
+                'Description text blobs are empty after stripping, skipping translation')
             return None
 
         text_blobs[0] = "📄 " + await translate_text(text_blobs[0], is_manual)
