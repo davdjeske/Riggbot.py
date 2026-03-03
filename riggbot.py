@@ -20,10 +20,10 @@ translator = None
 
 # Keyword triggers dictionary
 KEYWORD_RESPONSES = {
-    'beer': 'mmmmm beer 🍺',
-    'weed': 'mmmmm weed 🍃',
+    'beer': 'mmmmm beer \U0001F37A',
+    'weed': 'mmmmm weed \U0001F343',
     'awaga': 'waga baba bobo',
-    'one piece': 'THE ONE PIECE IS REAL! 🏴\u200d☠️',
+    'one piece': 'THE ONE PIECE IS REAL! \U0001F3F4\u200d\u2620\uFE0F',
     'it just works': 'my old uncle ToddBot used to say that all the time...',
     'skyrim': 'my old uncle ToddBot used to release that game all the time...',
 
@@ -146,11 +146,11 @@ async def on_message(message):
         return
 
     if 'say goodbye riggbot' in message.content.lower():
-        await message.channel.send('Goodbye! 👋', silent=True)
+        await message.channel.send('Goodbye! \U0001F44B', silent=True)
         await client.close()
 
     if 'riggbot' in content_lower:
-        await message.channel.send('I\'m riggbot! 🤖', silent=True)
+        await message.channel.send('I\'m riggbot! \U0001F916', silent=True)
 
 
 async def on_reaction_add(reaction, user):
@@ -162,14 +162,14 @@ async def on_reaction_add(reaction, user):
         Maybe just a cooldown?         
     '''
     # star recognition (before other checks since it need to be a reaction on bot's messages)
-    if reaction.message.author == client.user and reaction.emoji == '⭐' and reaction.count == 1:
+    if reaction.message.author == client.user and reaction.emoji == '\u2B50' and reaction.count == 1:
         await reaction.message.channel.send('omg thank you so much')
 
     # ignore bot's own reactions and reactions to bot's message
     if user == client.user or reaction.message.author == client.user:
         return
 
-    if reaction.emoji == '🏳️‍⚧️' and reaction.count == 1:
+    if reaction.emoji == '\U0001F3F3\uFE0F\u200D\u26A7\uFE0F' and reaction.count == 1:
         logging.info('Translation trigger detected by reaction')
         msg = reaction.message
         await process_message(msg, is_manual=True)
@@ -266,19 +266,19 @@ async def process_embed(embed, is_manual: bool) -> str | None:
 
         temp_translation = await translate_text(text_blobs[0], is_manual)
         if temp_translation:
-            translation = "📄 " + temp_translation
+            translation = "\U0001F4C4 " + temp_translation
             logging.info('Main description text translated')
 
         if len(text_blobs) > 1:
             temp_translation = await translate_text(text_blobs[1], is_manual)
             if temp_translation:
-                translation += "\n\n💬 " + temp_translation
+                translation += "\n\n\U0001F4AC " + temp_translation
                 logging.info('Quoted text found and translated')
 
         if len(text_blobs) > 2:  # aforementioned handling of unexpected extra blobs
             logging.error(f'Unexpected Text Blob(s): {text_blobs[2:]}')
 
-        if not translation.strip():
+        if translation.strip():
             return translation
         else:
             return None
