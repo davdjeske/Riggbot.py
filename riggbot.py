@@ -106,9 +106,6 @@ def run_bot():
     logging.info('Starting Discord client...')
     client.run(TOKEN)
 
-
-if __name__ == '__main__':
-    run_bot()
 # endregion
 
 
@@ -324,3 +321,6 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
     return None
 
 # endregion
+
+if __name__ == '__main__':
+    run_bot()
