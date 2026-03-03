@@ -1,23 +1,16 @@
 import asyncio
+import random
 import discord
 import logging
 import os
 import re
 from dotenv import load_dotenv
+from googletrans import Translator
 
-# Load .env variables at the top
+# Load .env variables
 load_dotenv()
 
-# Ensure `Translator` symbol exists at module import time so frozen builds
-# can reference the class and PyInstaller will detect the dependency when
-# googletrans is available in the environment.
-try:
-    from googletrans import Translator
-except Exception:
-    Translator = None
-
-
-# Globals that will be initialized by `init_bot()` or `run_bot()`.
+# Global vars that are initialized by `init_bot()` or `run_bot()`.
 TOKEN = None
 EMBED_BOT_NAME = None
 DEST_LANG = None
@@ -36,9 +29,11 @@ KEYWORD_RESPONSES = {
 
 }
 
+# region: Bot Initialization and Setup
 
-# TODO learn what this does
+
 def init_logging():
+    # TODO: learn more about this logging library and improve the logging implementation
     logging.basicConfig(level=logging.INFO,
                         format='[%(levelname)s] %(message)s')
     logging.getLogger('httpx').setLevel(logging.WARNING)
@@ -47,19 +42,20 @@ def init_logging():
 
 
 def init_bot():
-    """Initialize global bot dependencies (discord client, translator).
-
-    Call this from CI setup or before `run_bot()` to configure the runtime without starting the client.
+    """Initialize global bot dependencies and configure the runtime without starting the client for better
+        error handling and logging during the init phase, especially for CI and testing purposes.
     """
-    global client, translator
+    # totally unrelated but TODO: implement testing :clueless:
+
+    global client, translator, TOKEN, EMBED_BOT_NAME, DEST_LANG, MANUAL_OVERRIDE_LANG
 
     intents = discord.Intents.default()
     intents.message_content = True
     intents.reactions = True
     intents.messages = True
-
     logging.debug(f'Using intents: {intents}')
 
+    # Initialize Discord client and register event handlers
     client = discord.Client(intents=intents)
     try:
         client.event(on_ready)
@@ -72,28 +68,51 @@ def init_bot():
         # If handlers are not yet defined at init time, log the exception for visibility
         logging.exception(f'Error registering listeners: {e}')
 
-    # Initialize translator (googletrans) if available, else use a dummy async-compatible translator
-    try:
-        from googletrans import Translator as _TranslatorCls
-    except Exception:
-        _TranslatorCls = None
+    # Initialize translator (googletrans)
+    translator = Translator()
+    logging.info('Translator initialized.')
 
-    if _TranslatorCls:
-        translator = _TranslatorCls()
-        logging.info('Translator initialized. (googletrans available)')
-    else:
-        class _DummyTranslator:
-            async def detect(self, text):
-                return type('D', (), {'lang': 'en'})()
+    # Load env vars
+    TOKEN = bot_token()
+    EMBED_BOT_NAME = (os.getenv('EMBED_BOT_NAME', '') or '').lower()
+    DEST_LANG = os.getenv('DEST_LANG', 'en') or 'en'
+    MANUAL_OVERRIDE_LANG = os.getenv(
+        'MANUAL_OVERRIDE_LANG', 'zh-CN') or 'zh-CN'
 
-            async def translate(self, text, dest='en'):
-                return type('R', (), {'text': text})()
-
-        translator = _DummyTranslator()
-        logging.info(
-            'Dummy translator initialized (googletrans not available)')
+    logging.info(f'Embed bot name filter: "{EMBED_BOT_NAME}"')
+    logging.info(f'Default destination language: {DEST_LANG}')
+    logging.info(f'Manual override language: {MANUAL_OVERRIDE_LANG}')
 
 
+def bot_token() -> str:  # Load bot token from .env file
+    raw = os.getenv('RIGGBOT_TOKEN')
+    token = str(raw).strip() if raw is not None else None
+    if token:
+        logging.info('Loaded token from .env')
+        return token
+
+    # Not found or empty
+    raise FileNotFoundError(
+        "No RIGGBOT_TOKEN found in .env.\n"
+        "Create a .env file in the project root with the line:\n"
+        "RIGGBOT_TOKEN=your_bot_token_here\n"
+        "Only .env format is supported for token ingestion.")
+
+
+def run_bot():
+    # Initialize and run the bot. For CI, call `init_bot()` and avoid calling `run_bot()`.
+    init_logging()
+    init_bot()
+    logging.info('Starting Discord client...')
+    client.run(TOKEN)
+
+
+if __name__ == '__main__':
+    run_bot()
+# endregion
+
+
+# region: Discord Event Handlers and Reply Handler
 async def on_ready():
     logging.info(f'{client.user} is online')
 
@@ -102,7 +121,7 @@ async def on_message(message):
     if message.author == client.user:  # ignore messages from the bot itself
         return
 
-    if message.webhook_id is not None:
+    if message.webhook_id is not None:  # ignore webhook messages
         return
 
     # TODO: further refine filtering and avoid processing non-relevant messages
@@ -110,9 +129,9 @@ async def on_message(message):
     if EMBED_BOT_NAME in message.author.name.lower():
         logging.info(
             f'Message from embed bot "{message.author.name}" detected')
-        await handle_message(message, is_manual=False)
+        await process_message(message, is_manual=False)
 
-    # If this message is a reply, handle it
+    # If this message is a reply, handle it separately
     try:
         if message.type == discord.MessageType.reply and message.content:
             await handle_reply(message)
@@ -125,7 +144,8 @@ async def on_message(message):
         if keyword in content_lower:
             await message.channel.send(response, silent=True)
 
-    if not message.author.name == 'riggoon':
+    # i dont care that this is hardcoded i know its bad practice
+    if message.author.name != 'riggoon':
         return
 
     if 'say goodbye riggbot' in message.content.lower():
@@ -137,7 +157,14 @@ async def on_message(message):
 
 
 async def on_reaction_add(reaction, user):
-    # star recognition
+
+    ''' TODO: refine this detection to avoid repeated triggers
+        for example, if the user reacts and then unreacts and then reacts again, 
+        im pretty sure it will trigger twice since its checking for count == 1.
+        Need to figure out a good way to fix this, preferably without too much complexity
+        Maybe just a cooldown?         
+    '''
+    # star recognition (before other checks since it need to be a reaction on bot's messages)
     if reaction.message.author == client.user and reaction.emoji == '⭐' and reaction.count == 1:
         await reaction.message.channel.send('omg thank you so much')
 
@@ -148,14 +175,12 @@ async def on_reaction_add(reaction, user):
     if reaction.emoji == '🏳️‍⚧️' and reaction.count == 1:
         logging.info('Translation trigger detected by reaction')
         msg = reaction.message
-        await handle_message(msg, is_manual=True)
+        await process_message(msg, is_manual=True)
         logging.info('Handled manual translation trigger from reaction')
 
 
 async def handle_reply(message):
     msg_content = message.content.lower()
-    if message.author == client.user:
-        return
     ref_msg = None
     # message.reference may contain resolved message or just ids
     if getattr(message.reference, 'resolved', None):
@@ -169,19 +194,23 @@ async def handle_reply(message):
 
     if 'trans' in msg_content:
         logging.info('Translation trigger detected in reply')
-        if ref_msg and not ref_msg.author == client.user:
-            await handle_message(ref_msg, is_manual=True)
+        if ref_msg.author != client.user:
+            await process_message(ref_msg, is_manual=True)
             logging.info('Handled manual translation trigger from reply')
 
+    # experimental (a.k.a. i havent actually tested this much at all)
     if 'riggbot is this true' in msg_content or '<@1293252648803237899> is this true' in msg_content:
-        logging.info('Truth check trigger detected in reply')
-        if ref_msg and not ref_msg.author == client.user:
-            await message.reply('TODO: create truth check logic and responses', silent=True)
-            # TODO: implement truth check logic and responses
-            logging.info('Handled truth check trigger from reply')
+        logging.info('Analyzing if true')
+        if ref_msg.author != client.user:
+            await message.reply(random.choice(['Yes', 'No']), silent=True)
+            # TODO: add more replies here
+            logging.info('Delivered the truth')
+
+# endregion
 
 
-async def handle_message(message, is_manual: bool):
+# region: Message Processing and Translation Logic
+async def process_message(message, is_manual: bool):
     logging.info(f'Handling message translation (manual={is_manual})')
     translations = []
     # multiple attempts to make sure it gets the embed on a recent message
@@ -195,11 +224,13 @@ async def handle_message(message, is_manual: bool):
             break
         if attempt < max_attempts - 1:
             await asyncio.sleep(delay)
+
     if embeds:
-        emb_trans = await translate_embed(embeds[0], is_manual)
+        emb_trans = await process_embed(embeds[0], is_manual)
         if emb_trans:
             translations.append(emb_trans)
-        logging.info('Message embed translated')
+            logging.info('Message embed translated')
+
     elif message.content:
         con_trans = await translate_text(message.content, is_manual)
         if con_trans:
@@ -212,103 +243,84 @@ async def handle_message(message, is_manual: bool):
         await message.reply('Sorry, I couldn\'t find anything to translate in that', silent=True)
 
 
-async def translate_embed(embed, is_manual: bool) -> str | None:
+async def process_embed(embed, is_manual: bool) -> str | None:
     description = embed.to_dict().get("description")
     if description:
-        # regex split to get text around 'quoted' seperater and post's metadata (views, likes, etc.)
+        # regex split to get text around 'quoted' separator and post's metadata (views, likes, etc.)
         text_blobs = re.split(r"\W*\*\*\[.*\*\*\W*", description)
-        logging.info(f'Raw Description Text Blobs: {text_blobs}')
 
-        if ''.join(text_blobs).strip() == '':
-            logging.info(
-                'Description text blobs are empty after stripping, skipping translation')
+        # remove empty blobs that may occur due to regex split
+        for i, blob in enumerate(text_blobs):
+            if blob.strip() == '':
+                text_blobs = text_blobs[:i:]
+
+        if len(text_blobs) == 0:
+            logging.info('Text blobs empty, skipping translation')
             return None
 
-        text_blobs[0] = "📄 " + await translate_text(text_blobs[0], is_manual)
+        """ There should only be at most 2 blobs (main and quoted), if there is a case
+            where there are more than 2 that is NOT an error, this should be changed to 
+            a loop but until then I think this is easier to read and understand. So, for 
+            now, any extra blobs that may occur will be logged and ignored.
+        """
+
+        logging.info(f'Raw Description Text Blobs: {text_blobs}')
+        translation = ''
+
+        temp_translation = await translate_text(text_blobs[0], is_manual)
+        if temp_translation:
+            translation = "📄 " + temp_translation
+            logging.info('Main description text translated')
+
         if len(text_blobs) > 1:
-            text_blobs[1] = "💬 " + await translate_text(text_blobs[1], is_manual)
-        if len(text_blobs) > 2:
+            temp_translation = await translate_text(text_blobs[1], is_manual)
+            if temp_translation:
+                translation += "\n\n💬 " + temp_translation
+                logging.info('Quoted text found and translated')
+
+        if len(text_blobs) > 2:  # aforementioned handling of unexpected extra blobs
             logging.error(f'Unexpected Text Blob(s): {text_blobs[2:]}')
-            logging.debug(f'Removing unexpected text blobs')
-            text_blobs = text_blobs[:2]
-        translation = '\n'.join(text_blobs)
-        return translation
+
+        if not translation.strip():
+            return translation
+        else:
+            return None
 
 
-async def translate_text(content: str, is_manual: bool) -> str | None:
-    """Translate text content and return translation.
+async def translate_text(text: str, is_manual: bool) -> str | None:
+    """Core translation function that detects the language of the input text and 
+        translates it to the destination language if needed.
 
     Args:
-        content: The text content to translate
+        text: The text content to translate
         is_manual: Whether this is a manual translation trigger
 
     Returns:
         Translated string or None if no translation needed
     """
+
     try:
-        logging.info(f'Translating text (manual={is_manual}): {content}')
+        logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
-        detected = await asyncio.to_thread(translator.detect, content)
+        detected = await asyncio.to_thread(translator.detect, text)
+
         if detected.lang != DEST_LANG:
             # need to translate
             logging.info(
                 f'Translating from {detected.lang} to {DEST_LANG}')
-            translated = await asyncio.to_thread(translator.translate, content, dest=DEST_LANG)
+            translated = await asyncio.to_thread(translator.translate, text, dest=DEST_LANG)
             translation = f"{detected.lang}→{DEST_LANG}: {translated.text}"
-        elif is_manual and detected.lang == DEST_LANG:
+
+        elif is_manual:
             # if manual and already in dest lang, translate to override lang
             logging.info(
                 f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
-            translated = await asyncio.to_thread(translator.translate, content, dest=MANUAL_OVERRIDE_LANG)
+            translated = await asyncio.to_thread(translator.translate, text, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
+
         return translation
     except Exception as e:
         logging.error(f'Translation error: {e}')
     return None
 
-
-def run_bot():
-    # Initialize and run the bot. For CI, call `init_bot()` and avoid calling `run_bot()`.
-    init_logging()
-    init_bot()
-    # set module-level globals so event handlers can access them
-    global TOKEN, EMBED_BOT_NAME, DEST_LANG, MANUAL_OVERRIDE_LANG
-
-    TOKEN = bot_token()
-    if not TOKEN:
-        raise ValueError('No token provided to run the bot')
-
-    EMBED_BOT_NAME = os.getenv('EMBED_BOT_NAME', '') or ''
-    EMBED_BOT_NAME = EMBED_BOT_NAME.lower()
-    DEST_LANG = os.getenv('DEST_LANG', 'en') or 'en'
-    MANUAL_OVERRIDE_LANG = os.getenv(
-        'MANUAL_OVERRIDE_LANG', 'zh-CN') or 'zh-CN'
-
-    logging.info(f'Embed bot name filter: "{EMBED_BOT_NAME}"')
-    logging.info(f'Default destination language: {DEST_LANG}')
-    logging.info(f'Manual override language: {MANUAL_OVERRIDE_LANG}')
-
-    logging.info('Starting Discord client...')
-    client.run(TOKEN)
-
-# Load bot token from .env file (own function for better error handling)
-
-
-def bot_token() -> str:
-    # load variables from a local .env into the environment
-    token = os.getenv('RIGGBOT_TOKEN')
-
-    if token and str(token).strip():
-        logging.info('Loaded token from .env')
-        return str(token).strip()
-
-    # Nothing found — provide a helpful error message
-    raise FileNotFoundError(
-        "No RIGGBOT_TOKEN found in .env.\n"
-        "Create a .env file in the project root with the line:\n"
-        "RIGGBOT_TOKEN=your_bot_token_here\n"
-        "Only .env format is supported for token ingestion.")
-
-
-if __name__ == '__main__':
-    run_bot()
+# endregion
