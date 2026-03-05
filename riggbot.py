@@ -299,20 +299,20 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
     try:
         logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
-        detected = await asyncio.to_thread(translator.detect, text)
+        detected = await translator.detect(text)
 
         if detected.lang != DEST_LANG:
             # need to translate
             logging.info(
                 f'Translating from {detected.lang} to {DEST_LANG}')
-            translated = await asyncio.to_thread(translator.translate, text, dest=DEST_LANG)
+            translated = await translator.translate(text, dest=DEST_LANG)
             translation = f"{detected.lang}→{DEST_LANG}: {translated.text}"
 
         elif is_manual:
             # if manual and already in dest lang, translate to override lang
             logging.info(
                 f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
-            translated = await asyncio.to_thread(translator.translate, text, dest=MANUAL_OVERRIDE_LANG)
+            translated = await translator.translate(text, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
 
         return translation
