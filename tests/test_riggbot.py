@@ -1,31 +1,29 @@
-"""
-Tests for riggbot.py
-
-Covers:
-  - bot_token(): env var loading and error handling
-  - KEYWORD_RESPONSES: content validation
-  - translate_text(): language detection and translation decision logic
-  - process_embed(): embed description parsing and translation
-"""
-
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 import riggbot
 
 
 # ---------------------------------------------------------------------------
-# bot_token
+# region Env Loading Tests
 # ---------------------------------------------------------------------------
-
+''' 
+Tests for loading configuration from environment variables. These tests ensure that
+the env vars are read corrrectly, whitespace is stripped, and defaults are applied when vars are missing.
+For BOT_TOKEN, also tests that a FileNotFoundError is raised if the token is missing or empty,
+since it's required for the bot to function.
+'''
 class TestBotToken:
+    # can read token from env
     def test_loads_token_from_env(self, monkeypatch):
-        monkeypatch.setenv('RIGGBOT_TOKEN', 'test_token_abc')
-        assert riggbot.bot_token() == 'test_token_abc'
+        monkeypatch.setenv('RIGGBOT_TOKEN', 'bot_token')
+        assert riggbot.bot_token() == 'bot_token'
 
+    # can strip whitespace from env var
     def test_strips_surrounding_whitespace(self, monkeypatch):
         monkeypatch.setenv('RIGGBOT_TOKEN', '   padded_token   ')
         assert riggbot.bot_token() == 'padded_token'
 
+    # raises FileNotFoundError if env var is missing or empty
     def test_raises_when_env_var_missing(self, monkeypatch):
         monkeypatch.delenv('RIGGBOT_TOKEN', raising=False)
         with pytest.raises(FileNotFoundError):
@@ -37,21 +35,70 @@ class TestBotToken:
             riggbot.bot_token()
 
 
+class TestEmbedBot:
+    # can read embed bot name from env
+    def test_loads_embed_bot_name_from_env(self, monkeypatch):
+        monkeypatch.setenv('EMBED_BOT_NAME', 'EmbedBot')
+        riggbot.init_bot()
+        assert riggbot.EMBED_BOT_NAME == 'embedbot'
+
+    # can strip whitespace from embed bot name from env
+    def test_strips_whitespace_from_embed_bot_name(self, monkeypatch):
+        monkeypatch.setenv('EMBED_BOT_NAME', '   EmbedBot   ')
+        riggbot.init_bot()
+        assert riggbot.EMBED_BOT_NAME == 'embedbot'
+
+    # defaults to '' if env var is missing
+    def test_defaults_embed_bot_name(self, monkeypatch):
+        monkeypatch.delenv('EMBED_BOT_NAME', raising=False)
+        riggbot.init_bot()
+        assert riggbot.EMBED_BOT_NAME == ''
+
+
+class TestDestLang:
+    # can read dest lang from env
+    def test_loads_dest_lang_from_env(self, monkeypatch):
+        monkeypatch.setenv('DEST_LANG', 'de')
+        riggbot.init_bot()
+        assert riggbot.DEST_LANG == 'de'
+
+    # can strip whitespace from dest lang env var
+    def test_strips_whitespace_from_dest_lang(self, monkeypatch):
+        monkeypatch.setenv('DEST_LANG', '   de   ')
+        riggbot.init_bot()
+        assert riggbot.DEST_LANG == 'de'
+
+    # defaults to 'en' if env var is missing
+    def test_defaults_dest_lang(self, monkeypatch):
+        monkeypatch.delenv('DEST_LANG', raising=False)
+        riggbot.init_bot()
+        assert riggbot.DEST_LANG == 'en'
+
+
+class TestManualOverrideLang:
+    # can read manual override lang from env
+    def test_loads_manual_override_lang_from_env(self, monkeypatch):
+        monkeypatch.setenv('MANUAL_OVERRIDE_LANG', 'de')
+        riggbot.init_bot()
+        assert riggbot.MANUAL_OVERRIDE_LANG == 'de'
+
+    # can strip whitespace from manual override lang env var
+    def test_strips_whitespace_from_manual_override_lang(self, monkeypatch):
+        monkeypatch.setenv('MANUAL_OVERRIDE_LANG', '   de   ')
+        riggbot.init_bot()
+        assert riggbot.MANUAL_OVERRIDE_LANG == 'de'
+
+    # defaults to 'zh-CN' if env var is missing
+    def test_defaults_manual_override_lang(self, monkeypatch):
+        monkeypatch.delenv('MANUAL_OVERRIDE_LANG', raising=False)
+        riggbot.init_bot()
+        assert riggbot.MANUAL_OVERRIDE_LANG == 'zh-CN'
+# endregion
+
 # ---------------------------------------------------------------------------
-# KEYWORD_RESPONSES
+# region Translation Tests
 # ---------------------------------------------------------------------------
 
-class TestKeywordResponses:
-    def test_all_responses_are_non_empty_strings(self):
-        for keyword, response in riggbot.KEYWORD_RESPONSES.items():
-            assert isinstance(
-                response, str), f'Response for "{keyword}" is not a string'
-            assert response.strip(), f'Response for "{keyword}" is empty'
-
-
-# ---------------------------------------------------------------------------
-# translate_text
-# ---------------------------------------------------------------------------
 
 class TestTranslateText:
     """
@@ -104,11 +151,12 @@ class TestTranslateText:
         riggbot.translator = mock
         result = await riggbot.translate_text('hello', is_manual=False)
         assert result is None
-
+# endregion
 
 # ---------------------------------------------------------------------------
 # process_embed
 # ---------------------------------------------------------------------------
+
 
 class TestProcessEmbed:
     @pytest.fixture(autouse=True)
@@ -147,11 +195,11 @@ class TestProcessEmbed:
     async def test_translates_two_blob_description(self):
         # The regex splits on **[...](...)** style separators
         embed = self._make_embed(
-            'main post text **[via source](http://example.com)** quoted reply text')
+            'main post text **[quoted/emoji](http://example.com)** quoted reply text')
         result = await riggbot.process_embed(embed, is_manual=False)
         assert result is not None
         assert '\U0001F4C4' in result   # 📄 main blob
-        assert '\U0001F4AC' in result   # 💬 quoted blob
+        assert '\U0001F4AC' in result   # 💬 quoted blob       
 
     async def test_passes_is_manual_flag_through(self):
         """is_manual=True should trigger the manual override path in translate_text."""

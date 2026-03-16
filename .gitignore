@@ -2,6 +2,7 @@
 riggbot token.txt
 .venv
 .env
+.vscode/
 __pycache__/
 .pytest_cache/
 build/

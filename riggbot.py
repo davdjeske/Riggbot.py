@@ -74,13 +74,22 @@ def init_bot():
 
     # Load env vars
     TOKEN = bot_token()
-    EMBED_BOT_NAME = (os.getenv('EMBED_BOT_NAME', '') or '').lower()
+
+    EMBED_BOT_NAME = (os.getenv('EMBED_BOT_NAME', '') or '').strip().lower()
+    if EMBED_BOT_NAME:
+        logging.info(
+            f'Loaded embed bot name filter from .env: "{EMBED_BOT_NAME}"')
+    else:
+        logging.warning(
+            'No embed bot name filter set in .env, defaulting to "" (disabled)')
+    logging.info(
+        f'Embed bot name filter: "{EMBED_BOT_NAME if EMBED_BOT_NAME else "(disabled)"}"')
+
     DEST_LANG = os.getenv('DEST_LANG', 'en') or 'en'
+    logging.info(f'Default destination language: {DEST_LANG}')
+
     MANUAL_OVERRIDE_LANG = os.getenv(
         'MANUAL_OVERRIDE_LANG', 'zh-CN') or 'zh-CN'
-
-    logging.info(f'Embed bot name filter: "{EMBED_BOT_NAME}"')
-    logging.info(f'Default destination language: {DEST_LANG}')
     logging.info(f'Manual override language: {MANUAL_OVERRIDE_LANG}')
 
 
@@ -123,6 +132,7 @@ async def on_message(message):
 
     # TODO: further refine filtering and avoid processing non-relevant messages
 
+    #TODO: latibot non embed message filter
     if EMBED_BOT_NAME in message.author.name.lower():
         logging.info(
             f'Message from embed bot "{message.author.name}" detected')
@@ -154,7 +164,6 @@ async def on_message(message):
 
 
 async def on_reaction_add(reaction, user):
-
     ''' TODO: refine this detection to avoid repeated triggers
         for example, if the user reacts and then unreacts and then reacts again, 
         im pretty sure it will trigger twice since its checking for count == 1.
@@ -299,20 +308,20 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
     try:
         logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
-        detected = await translator.detect(text)
+        detected = await asyncio.to_thread(translator.detect, text)
 
         if detected.lang != DEST_LANG:
             # need to translate
             logging.info(
                 f'Translating from {detected.lang} to {DEST_LANG}')
-            translated = await translator.translate(text, dest=DEST_LANG)
+            translated = await asyncio.to_thread(translator.translate, text, dest=DEST_LANG)
             translation = f"{detected.lang}→{DEST_LANG}: {translated.text}"
 
         elif is_manual:
             # if manual and already in dest lang, translate to override lang
             logging.info(
                 f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
-            translated = await translator.translate(text, dest=MANUAL_OVERRIDE_LANG)
+            translated = await asyncio.to_thread(translator.translate, text, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
 
         return translation
