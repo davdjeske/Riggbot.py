@@ -255,7 +255,9 @@ async def process_embed(embed, is_manual: bool) -> str | None:
     if description:
         # regex split to get text around 'quoted' separator and post's metadata (views, likes, etc.)
         text_blobs = re.split(r"\s*\*\*\[.*\*\*\s*", description)
-
+        # TODO: add handling for 'attached' tweets (these are rare, and i need a better example with text
+        # to test with, but basically need to handle a slightly different format but its similar to quoted tweets)
+        
         # remove empty blobs that may occur due to regex split
         for i, blob in enumerate(text_blobs):
             if blob.strip() == '':
@@ -310,7 +312,7 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
 
-        # Extract markdown links before translation to preserve them
+        # Extract markdown links before translation to preserve them TODO: maybe come up with a more robust placeholder
         md_links = re.findall(r'\[.*?\]\(.*?\)', text)
         for i, link in enumerate(md_links):
             text = text.replace(link, f'{{LINK_{i}}}', 1)
@@ -335,7 +337,11 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         if translation:
             for i, link in enumerate(md_links):
                 translation = translation.replace(f'{{LINK_{i}}}', link)
+            # googletrans sometimes uses backticks; swap them out since they break discord markdown formatting
+            # hopefully this doesn't cause any issues with legitimate backticks :clueless:
+            translation = translation.replace('`', '\'')
 
+        logging.info(f'Translation result: {translation}')
         return translation
     except Exception as e:
         logging.error(f'Translation error: {e}')
