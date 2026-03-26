@@ -23,12 +23,13 @@ class TestBotToken:
         monkeypatch.setenv('RIGGBOT_TOKEN', '   padded_token   ')
         assert riggbot.bot_token() == 'padded_token'
 
-    # raises FileNotFoundError if env var is missing or empty
+    # raises FileNotFoundError if env var is missing
     def test_raises_when_env_var_missing(self, monkeypatch):
         monkeypatch.delenv('RIGGBOT_TOKEN', raising=False)
         with pytest.raises(FileNotFoundError):
             riggbot.bot_token()
 
+    # or empty
     def test_raises_when_env_var_empty(self, monkeypatch):
         monkeypatch.setenv('RIGGBOT_TOKEN', '')
         with pytest.raises(FileNotFoundError):
@@ -96,7 +97,7 @@ class TestManualOverrideLang:
 # endregion
 
 # ---------------------------------------------------------------------------
-# region Translation Tests
+# region Translation Tests TODO: check these again
 # ---------------------------------------------------------------------------
 
 
@@ -154,7 +155,7 @@ class TestTranslateText:
 # endregion
 
 # ---------------------------------------------------------------------------
-# process_embed
+# process_embed TODO: check these again
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +191,7 @@ class TestProcessEmbed:
         embed = self._make_embed('你好世界')
         result = await riggbot.process_embed(embed, is_manual=False)
         assert result is not None
-        assert '\U0001F4C4' in result  # 📄 prefix for main text
+        assert '\U0001F4C4' in result  # [page emoji] prefix for main text
 
     async def test_translates_two_blob_description(self):
         # The regex splits on **[...](...)** style separators
@@ -198,8 +199,8 @@ class TestProcessEmbed:
             'main post text **[quoted/emoji](http://example.com)** quoted reply text')
         result = await riggbot.process_embed(embed, is_manual=False)
         assert result is not None
-        assert '\U0001F4C4' in result   # 📄 main blob
-        assert '\U0001F4AC' in result   # 💬 quoted blob       
+        assert '\U0001F4C4' in result   # [page emoji] main blob
+        assert '\U0001F4AC' in result   # [speech balloon emoji] quoted blob       
 
     async def test_passes_is_manual_flag_through(self):
         """is_manual=True should trigger the manual override path in translate_text."""

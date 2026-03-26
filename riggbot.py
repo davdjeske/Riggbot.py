@@ -251,9 +251,10 @@ async def process_message(message, is_manual: bool):
 
 async def process_embed(embed, is_manual: bool) -> str | None:
     description = embed.to_dict().get("description")
+    logging.info(f'Raw embed description: {description}')
     if description:
         # regex split to get text around 'quoted' separator and post's metadata (views, likes, etc.)
-        text_blobs = re.split(r"\W*\*\*\[.*\*\*\W*", description)
+        text_blobs = re.split(r"\s*\*\*\[.*\*\*\s*", description)
 
         # remove empty blobs that may occur due to regex split
         for i, blob in enumerate(text_blobs):
@@ -308,6 +309,12 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
     try:
         logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
+
+        # Extract markdown links before translation to preserve them
+        md_links = re.findall(r'\[.*?\]\(.*?\)', text)
+        for i, link in enumerate(md_links):
+            text = text.replace(link, f'{{LINK_{i}}}', 1)
+
         detected = await asyncio.to_thread(translator.detect, text)
 
         if detected.lang != DEST_LANG:
@@ -323,6 +330,11 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
                 f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
             translated = await asyncio.to_thread(translator.translate, text, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
+
+        # Restore extracted markdown links
+        if translation:
+            for i, link in enumerate(md_links):
+                translation = translation.replace(f'{{LINK_{i}}}', link)
 
         return translation
     except Exception as e:
