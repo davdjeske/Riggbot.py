@@ -75,22 +75,32 @@ def init_bot():
     # Load env vars
     TOKEN = bot_token()
 
-    EMBED_BOT_NAME = (os.getenv('EMBED_BOT_NAME', '') or '').strip().lower()
-    if EMBED_BOT_NAME:
-        logging.info(
-            f'Loaded embed bot name filter from .env: "{EMBED_BOT_NAME}"')
-    else:
+    # For provided env var, if it exists, strip and return, otherwise return default
+    # also returns a boolean indicating whether the default was used for logging
+    def load_env(var: str, default: str) -> tuple[str, bool]:
+        raw = os.getenv(var, '')
+        value = raw.strip().lower() if var == 'EMBED_BOT_NAME' else raw.strip()
+        if value:
+            return value, False
+        return default, True
+
+    EMBED_BOT_NAME, defaulted = load_env('EMBED_BOT_NAME', '')
+    if defaulted:
         logging.warning(
-            'No embed bot name filter set in .env, defaulting to "" (disabled)')
+            'EMBED_BOT_NAME not set in .env; automatic translation disabled')
     logging.info(
-        f'Embed bot name filter: "{EMBED_BOT_NAME if EMBED_BOT_NAME else "(disabled)"}"')
+        f'EMBED_BOT_NAME: "{EMBED_BOT_NAME if EMBED_BOT_NAME else "(disabled)"}"')
 
-    DEST_LANG = os.getenv('DEST_LANG', 'en') or 'en'
-    logging.info(f'Default destination language: {DEST_LANG}')
+    DEST_LANG, defaulted = load_env('DEST_LANG', 'en')
+    if defaulted:
+        logging.warning('DEST_LANG not set in .env; defaulting to "en"')
+    logging.info(f'DEST_LANG: "{DEST_LANG}"')
 
-    MANUAL_OVERRIDE_LANG = os.getenv(
-        'MANUAL_OVERRIDE_LANG', 'zh-CN') or 'zh-CN'
-    logging.info(f'Manual override language: {MANUAL_OVERRIDE_LANG}')
+    MANUAL_OVERRIDE_LANG, defaulted = load_env('MANUAL_OVERRIDE_LANG', 'zh-CN')
+    if defaulted:
+        logging.warning(
+            'MANUAL_OVERRIDE_LANG not set in .env; defaulting to "zh-CN"')
+    logging.info(f'MANUAL_OVERRIDE_LANG: "{MANUAL_OVERRIDE_LANG}"')
 
 
 def bot_token() -> str:  # Load bot token from .env file
@@ -132,8 +142,8 @@ async def on_message(message):
 
     # TODO: further refine filtering and avoid processing non-relevant messages
 
-    #TODO: latibot non embed message filter
-    if EMBED_BOT_NAME in message.author.name.lower():
+    # TODO: latibot non embed message filter
+    if EMBED_BOT_NAME and EMBED_BOT_NAME in message.author.name.lower():
         logging.info(
             f'Message from embed bot "{message.author.name}" detected')
         await process_message(message, is_manual=False)
@@ -164,12 +174,12 @@ async def on_message(message):
 
 
 async def on_reaction_add(reaction, user):
-    ''' TODO: refine this detection to avoid repeated triggers
+    """ TODO: refine this detection to avoid repeated triggers
         for example, if the user reacts and then unreacts and then reacts again, 
         im pretty sure it will trigger twice since its checking for count == 1.
         Need to figure out a good way to fix this, preferably without too much complexity
         Maybe just a cooldown?         
-    '''
+    """
     # star recognition (before other checks since it need to be a reaction on bot's messages)
     if reaction.message.author == client.user and reaction.emoji == '\u2B50' and reaction.count == 1:
         await reaction.message.channel.send('omg thank you so much')
@@ -255,9 +265,7 @@ async def process_embed(embed, is_manual: bool) -> str | None:
     if description:
         # regex split to get text around 'quoted' separator and post's metadata (views, likes, etc.)
         text_blobs = re.split(r"\s*\*\*\[.*\*\*\s*", description)
-        # TODO: add handling for 'attached' tweets (these are rare, and i need a better example with text
-        # to test with, but basically need to handle a slightly different format but its similar to quoted tweets)
-        
+
         # remove empty blobs that may occur due to regex split
         for i, blob in enumerate(text_blobs):
             if blob.strip() == '':
@@ -271,6 +279,10 @@ async def process_embed(embed, is_manual: bool) -> str | None:
             where there are more than 2 that is NOT an error, this should be changed to 
             a loop but until then I think this is easier to read and understand. So, for 
             now, any extra blobs that may occur will be logged and ignored.
+
+            TODO: add handling for 'attached' tweets (these are rare, and i need a better 
+            example with text to test with, but basically need to handle a slightly 
+            different format but it should be similar to quoted tweets)
         """
 
         logging.info(f'Raw Description Text Blobs: {text_blobs}')
@@ -312,7 +324,8 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
 
-        # Extract markdown links before translation to preserve them TODO: maybe come up with a more robust placeholder
+        # Extract markdown links before translation to preserve them
+        # TODO: maybe come up with a more robust placeholder
         md_links = re.findall(r'\[.*?\]\(.*?\)', text)
         for i, link in enumerate(md_links):
             text = text.replace(link, f'{{LINK_{i}}}', 1)
@@ -337,9 +350,12 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         if translation:
             for i, link in enumerate(md_links):
                 translation = translation.replace(f'{{LINK_{i}}}', link)
-            # googletrans sometimes uses backticks; swap them out since they break discord markdown formatting
+            """ googletrans sometimes uses backticks; swap them out since they break discord markdown formatting
+            # so far this has only been observed with two backticks where it should be a quotation mark, 
+            # but if there are cases where single backticks are used in a similar way, ruh roh
             # hopefully this doesn't cause any issues with legitimate backticks :clueless:
-            translation = translation.replace('`', '\'')
+            """
+            translation = translation.replace('``', '\"')
 
         logging.info(f'Translation result: {translation}')
         return translation
