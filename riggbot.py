@@ -162,9 +162,11 @@ async def on_message(message):
             await message.channel.send(response, silent=True)
 
     # i dont care that this is hardcoded i know its bad practice
-    if message.author.name != 'riggoon':
+    if message.author.name != 'riggoon' or message.author.name != 'sarcly':
         return
 
+    # these are ""commands"" only accessible to certain users. 
+    # this is irresponsibly implemented."
     if 'say goodbye riggbot' in message.content.lower():
         await message.channel.send('Goodbye! \U0001F44B', silent=True)
         await client.close()
