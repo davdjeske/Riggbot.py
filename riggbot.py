@@ -26,7 +26,7 @@ KEYWORD_RESPONSES = {
     'one piece': 'THE ONE PIECE IS REAL! \U0001F3F4\u200d\u2620\uFE0F',
     'it just works': 'my old uncle ToddBot used to say that all the time...',
     'skyrim': 'my old uncle ToddBot used to release that game all the time...',
-
+    'not addicted btw', '<:clueless:1150947090340515880>'
 }
 
 # region: Bot Initialization and Setup
