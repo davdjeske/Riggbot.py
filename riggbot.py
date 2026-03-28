@@ -26,7 +26,7 @@ KEYWORD_RESPONSES = {
     'one piece': 'THE ONE PIECE IS REAL! \U0001F3F4\u200d\u2620\uFE0F',
     'it just works': 'my old uncle ToddBot used to say that all the time...',
     'skyrim': 'my old uncle ToddBot used to release that game all the time...',
-    'not addicted btw', '<:clueless:1150947090340515880>'
+    'not addicted btw': '<:clueless:1150947090340515880>',
 }
 
 # region: Bot Initialization and Setup
@@ -162,7 +162,7 @@ async def on_message(message):
             await message.channel.send(response, silent=True)
 
     # i dont care that this is hardcoded i know its bad practice
-    if message.author.name != 'riggoon' or message.author.name != 'sarcly':
+    if message.author.name != 'riggoon' and message.author.name != 'sarcly':
         return
 
     # these are ""commands"" only accessible to certain users. 

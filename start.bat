@@ -1,0 +1,2 @@
+py ./riggbot.py
+PAUSE
