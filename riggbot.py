@@ -328,11 +328,9 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         logging.info(f'Translating text (manual={is_manual}): {text}')
         translation = None
 
-        # Extract markdown links before translation to preserve them
-        # TODO: maybe come up with a more robust placeholder
-        md_links = re.findall(r'\[.*?\]\(.*?\)', text)
-        for i, link in enumerate(md_links):
-            text = text.replace(link, f'{{LINK_{i}}}', 1)
+        # Replace markdown links with just their display text before translation
+        # its before translation mostly for #, but if an @ gets translated, itd prob be funny
+        text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
 
         detected = await translator.detect(text)
 
@@ -350,14 +348,13 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
             translated = await translator.translate(text, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
 
-        # Restore extracted markdown links
         if translation:
-            for i, link in enumerate(md_links):
-                translation = translation.replace(f'{{LINK_{i}}}', link)
-            """ googletrans sometimes uses backticks; swap them out since they break discord markdown formatting
-            # so far this has only been observed with two backticks where it should be a quotation mark, 
-            # but if there are cases where single backticks are used in a similar way, ruh roh
-            # hopefully this doesn't cause any issues with legitimate backticks :clueless:
+            """ 
+            googletrans sometimes uses backticks; swap them out since they break discord markdown formatting
+            so far this has only been observed with two backticks where it should be a quotation mark, but if 
+            there are cases where single backticks are used in a similar way, ruh roh 
+
+            hopefully this doesn't cause any issues with legitimate backticks :clueless:
             """
             translation = translation.replace('``', '\"')
 
