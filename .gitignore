@@ -1,5 +1,6 @@
 
 riggbot token.txt
+riggbot.log*
 .venv
 .env
 .vscode/

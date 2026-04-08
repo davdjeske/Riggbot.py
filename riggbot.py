@@ -6,6 +6,7 @@ import os
 import re
 from dotenv import load_dotenv
 from googletrans import Translator
+from logging.handlers import RotatingFileHandler
 
 # Load .env variables
 load_dotenv()
@@ -33,9 +34,20 @@ KEYWORD_RESPONSES = {
 
 
 def init_logging():
-    # TODO: learn more about this logging library and improve the logging implementation
-    logging.basicConfig(level=logging.INFO,
-                        format='[%(levelname)s] %(message)s')
+    # TODO: should probably implement more consistent logging throughout the bot
+    # and possibly configure and utilize the logging levels a bit more (not sure if i care that much about this)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.StreamHandler(),    # console
+            # File handler with rotation, and will create a backup log file `riggbot.log.1`.
+            # not sure if thats overkill or not, but i mean its at most 2MB so probably fine
+            RotatingFileHandler('riggbot.log', maxBytes=1_000_000, backupCount=1)
+        ]
+    )
+    # these just effectively silence overly verbose logs from underlying libraries
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('httpcore').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
@@ -53,7 +65,7 @@ def init_bot():
     intents.message_content = True
     intents.reactions = True
     intents.messages = True
-    logging.debug(f'Using intents: {intents}')
+    logging.info(f'Using intents: {intents}')
 
     # Initialize Discord client and register event handlers
     client = discord.Client(intents=intents)
