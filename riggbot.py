@@ -300,6 +300,8 @@ async def process_embed(embed, is_manual: bool) -> str | None:
             example with text to test with, but basically need to handle a slightly 
             different format but it should be similar to quoted tweets)
         """
+        # TODO: new fxtwitter formatting changes how attached tweets and quoted tweets are formatted,
+        # this might be a trickier issue but hopefully regex can save the day.
 
         logging.info(f'Raw Description Text Blobs: {text_blobs}')
         translation = ''

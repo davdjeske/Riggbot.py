@@ -39,6 +39,11 @@ class TestEnvBotToken:
 
 
 class TestEnvEmbedBot:
+    # need to set fake token to avoid requiring a real .env file for tests
+    @pytest.fixture(autouse=True)
+    def setup_dest_lang(self, monkeypatch):
+        monkeypatch.setenv('RIGGBOT_TOKEN', 'fake-token')
+        
     # can read embed bot name from env
     def test_loads_embed_bot_name_from_env(self, monkeypatch):
         monkeypatch.setenv('EMBED_BOT_NAME', 'EmbedBot')
@@ -59,6 +64,11 @@ class TestEnvEmbedBot:
 
 
 class TestEnvDestLang:
+    # need to set fake token to avoid requiring a real .env file for tests
+    @pytest.fixture(autouse=True)
+    def setup_dest_lang(self, monkeypatch):
+        monkeypatch.setenv('RIGGBOT_TOKEN', 'fake-token')
+        
     # can read dest lang from env
     def test_loads_dest_lang_from_env(self, monkeypatch):
         monkeypatch.setenv('DEST_LANG', 'de')
@@ -79,6 +89,11 @@ class TestEnvDestLang:
 
 
 class TestEnvManualOverrideLang:
+    # need to set fake token to avoid requiring a real .env file for tests
+    @pytest.fixture(autouse=True)
+    def setup_dest_lang(self, monkeypatch):
+        monkeypatch.setenv('RIGGBOT_TOKEN', 'fake-token')
+    
     # can read manual override lang from env
     def test_loads_manual_override_lang_from_env(self, monkeypatch):
         monkeypatch.setenv('MANUAL_OVERRIDE_LANG', 'de')
@@ -113,15 +128,17 @@ class TestTranslateText:
 
     # before each test, ensures global vars are set correctly
     @pytest.fixture(autouse=True)
-    def setup_globals(self):
+    def setup_globals(self, monkeypatch):
+        # need to set token to avoid requiring a real .env file for tests
+        monkeypatch.setenv('RIGGBOT_TOKEN', 'fake-token')
         riggbot.DEST_LANG = 'en'
         riggbot.MANUAL_OVERRIDE_LANG = 'zh-CN'
 
     # helper to create a mock translator with specified detect and translate behavior
     def _make_translator(self, detected_lang, translated_text='translated'):
         mock = MagicMock()
-        mock.detect.return_value = MagicMock(lang=detected_lang)
-        mock.translate.return_value = MagicMock(text=translated_text)
+        mock.detect = AsyncMock(return_value=MagicMock(lang=detected_lang))
+        mock.translate = AsyncMock(return_value=MagicMock(text=translated_text))
         return mock
 
     # if already dest lang, returns none when not manual
@@ -155,7 +172,7 @@ class TestTranslateText:
     # if translator raises an exception, just return none
     async def test_returns_none_on_exception(self):
         mock = MagicMock()
-        mock.detect.side_effect = Exception('network error')
+        mock.detect = AsyncMock(side_effect=Exception('network error'))
         riggbot.translator = mock
         result = await riggbot.translate_text('hello', is_manual=False)
         assert result is None
@@ -169,15 +186,15 @@ class TestProcessEmbed:
 
     # before each test, ensures global vars are set correctly and sets up a default translator
     @pytest.fixture(autouse=True)
-    def setup_globals(self):
+    def setup_globals(self, monkeypatch):
         riggbot.DEST_LANG = 'en'
         riggbot.MANUAL_OVERRIDE_LANG = 'zh-CN'
+        # need to set token to avoid requiring a real .env file for tests
+        monkeypatch.setenv('RIGGBOT_TOKEN', 'fake-token')
         # Default translator: always reports zh-CN so a translation is always returned.
-        # Must be MagicMock (not AsyncMock) because translate_text calls translator methods
-        # via asyncio.to_thread(), which invokes them as plain synchronous callables.
         mock = MagicMock()
-        mock.detect.return_value = MagicMock(lang='zh-CN')
-        mock.translate.return_value = MagicMock(text='translated text')
+        mock.detect = AsyncMock(return_value=MagicMock(lang='zh-CN'))
+        mock.translate = AsyncMock(return_value=MagicMock(text='translated text'))
         riggbot.translator = mock
 
     # helper to create a mock embed with specified description
@@ -213,7 +230,7 @@ class TestProcessEmbed:
     # Both blobs already in DEST_LANG → translate_text returns None for both → overall None
     async def test_two_blob_neither_needs_translation(self):
         mock = MagicMock()
-        mock.detect.side_effect = [MagicMock(lang='en'), MagicMock(lang='en')]
+        mock.detect = AsyncMock(side_effect=[MagicMock(lang='en'), MagicMock(lang='en')])
         riggbot.translator = mock
         embed = self._make_embed(self.TWO_BLOB_DESC)
         result = await riggbot.process_embed(embed, is_manual=False)
@@ -222,9 +239,8 @@ class TestProcessEmbed:
     # First blob needs translation, second is already in DEST_LANG → only page emoji
     async def test_two_blob_only_first_needs_translation(self):
         mock = MagicMock()
-        mock.detect.side_effect = [
-            MagicMock(lang='zh-CN'), MagicMock(lang='en')]
-        mock.translate.return_value = MagicMock(text='translated text')
+        mock.detect = AsyncMock(side_effect=[MagicMock(lang='zh-CN'), MagicMock(lang='en')])
+        mock.translate = AsyncMock(return_value=MagicMock(text='translated text'))
         riggbot.translator = mock
         embed = self._make_embed(self.TWO_BLOB_DESC)
         result = await riggbot.process_embed(embed, is_manual=False)
@@ -235,9 +251,8 @@ class TestProcessEmbed:
     # First blob is already in DEST_LANG, second needs translation → only speech bubble emoji
     async def test_two_blob_only_second_needs_translation(self):
         mock = MagicMock()
-        mock.detect.side_effect = [
-            MagicMock(lang='en'), MagicMock(lang='zh-CN')]
-        mock.translate.return_value = MagicMock(text='translated text')
+        mock.detect = AsyncMock(side_effect=[MagicMock(lang='en'), MagicMock(lang='zh-CN')])
+        mock.translate = AsyncMock(return_value=MagicMock(text='translated text'))
         riggbot.translator = mock
         embed = self._make_embed(self.TWO_BLOB_DESC)
         result = await riggbot.process_embed(embed, is_manual=False)
@@ -248,9 +263,8 @@ class TestProcessEmbed:
     # Both blobs need translation → both emojis present in result
     async def test_two_blob_both_need_translation(self):
         mock = MagicMock()
-        mock.detect.side_effect = [
-            MagicMock(lang='zh-CN'), MagicMock(lang='zh-CN')]
-        mock.translate.return_value = MagicMock(text='translated text')
+        mock.detect = AsyncMock(side_effect=[MagicMock(lang='zh-CN'), MagicMock(lang='zh-CN')])
+        mock.translate = AsyncMock(return_value=MagicMock(text='translated text'))
         riggbot.translator = mock
         embed = self._make_embed(self.TWO_BLOB_DESC)
         result = await riggbot.process_embed(embed, is_manual=False)
@@ -261,8 +275,8 @@ class TestProcessEmbed:
     # if is_manual=True, should trigger manual override path in translate_text for both blobs
     async def test_passes_is_manual_flag_through(self):
         mock = MagicMock()
-        mock.detect.return_value = MagicMock(lang='en')
-        mock.translate.return_value = MagicMock(text='override translation')
+        mock.detect = AsyncMock(return_value=MagicMock(lang='en'))
+        mock.translate = AsyncMock(return_value=MagicMock(text='override translation'))
         riggbot.translator = mock
 
         embed = self._make_embed('some english text')
