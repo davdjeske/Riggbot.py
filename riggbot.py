@@ -142,7 +142,7 @@ def run_bot():
 
 # region: Discord Event Handlers and Reply Handler
 async def on_ready():
-    logging.info(f'{client.user} is online')
+    logging.info(f'{client.user} is online\n===========================================================\n')
 
 
 async def on_message(message):
@@ -159,6 +159,8 @@ async def on_message(message):
         logging.info(
             f'Message from embed bot "{message.author.name}" detected')
         await process_message(message, is_manual=False)
+        logging.info('Handled automatic translation trigger from embed bot\n')
+        
 
     # If this message is a reply, handle it separately
     try:
@@ -208,7 +210,7 @@ async def on_reaction_add(reaction, user):
         logging.info('Translation trigger detected by reaction')
         msg = reaction.message
         await process_message(msg, is_manual=True)
-        logging.info('Handled manual translation trigger from reaction')
+        logging.info('Handled manual translation trigger from reaction\n')
 
 
 async def handle_reply(message):
@@ -224,11 +226,10 @@ async def handle_reply(message):
         logging.warning('No reference message found for reply trigger')
         return
 
-    if 'trans' in msg_content:
+    if 'trans' in msg_content and message.author != client.user:
         logging.info('Translation trigger detected in reply')
-        if ref_msg.author != client.user:
-            await process_message(ref_msg, is_manual=True)
-            logging.info('Handled manual translation trigger from reply')
+        await process_message(ref_msg, is_manual=True)
+        logging.info('Handled manual translation trigger from reply\n')
 
     # experimental (a.k.a. i havent actually tested this much at all)
     if 'riggbot is this true' in msg_content or '<@1293252648803237899> is this true' in msg_content:
@@ -236,7 +237,7 @@ async def handle_reply(message):
         if ref_msg.author != client.user:
             await message.reply(random.choice(['Yes', 'No']), silent=True)
             # TODO: add more replies here
-            logging.info('Delivered the truth')
+            logging.info('Delivered the truth\n')
 
 # endregion
 
@@ -303,7 +304,6 @@ async def process_embed(embed, is_manual: bool) -> str | None:
         logging.info(f'Raw Description Text Blobs: {text_blobs}')
         translation = ''
 
-        # TODO: decide on any output formatting changes
         temp_translation = await translate_text(text_blobs[0], is_manual)
         if temp_translation:
             translation = "\U0001F4C4 " + temp_translation
@@ -345,16 +345,21 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
 
         detected = await translator.detect(text)
+        logging.info(f'Detected language: {detected.lang} (confidence: {detected.confidence})')
 
         if detected.lang != DEST_LANG:
             # need to translate
             logging.info(
                 f'Translating from {detected.lang} to {DEST_LANG}')
             translated = await translator.translate(text, dest=DEST_LANG)
-            translation = f"{detected.lang}→{DEST_LANG}: {translated.text}"
+            translation = f"{detected.lang}→{DEST_LANG}:\n{translated.text}"
 
         elif is_manual:
             # if manual and already in dest lang, translate to override lang
+            # TODO: the logging for manual override translation trigger is... inconsistent? I'm really not sure
+            # why/how but sometimes even though it properly translates to the override language, the logging just
+            # does not trigger, even the logging higher up in the call stack for the universal processing steps 
+            # very very strange interaction but the actual functionality seems to work fine, so im leaving it for now
             logging.info(
                 f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
             translated = await translator.translate(text, dest=MANUAL_OVERRIDE_LANG)
