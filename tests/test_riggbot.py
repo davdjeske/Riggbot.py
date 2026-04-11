@@ -223,9 +223,9 @@ class TestProcessEmbed:
         assert result is not None
         assert '\U0001F4C4' in result  # [page emoji] for main text
 
-    # Two-blob description: the regex splits on **[...](...)** style separators.
-    # Four cases covering every combination of blobs needing / not needing translation.
-    TWO_BLOB_DESC = 'main post text **[quoted/emoji](http://example.com)** quoted reply text'
+    # Two-blob description: mirrors the real fxtwitter quoting format —
+    # \n\n> **[Header](url)**\n> <separator line>\n> <quoted text>
+    TWO_BLOB_DESC = 'main post text\n\n> **[Quoting](http://example.com) Author**\n> \n> quoted reply text'
 
     # Both blobs already in DEST_LANG → translate_text returns None for both → overall None
     async def test_two_blob_neither_needs_translation(self):

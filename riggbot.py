@@ -280,7 +280,10 @@ async def process_embed(embed, is_manual: bool) -> str | None:
     logging.info(f'Raw embed description: {description}')
     if description:
         # regex split to get text around 'quoted' separator and post's metadata (views, likes, etc.)
-        text_blobs = re.split(r"\s*\*\*\[.*\*\*\s*", description)
+        # two main cases to handle:
+        # 1. matches the full quoting header block: the \n\n> **[...]...** line plus the following '>'s
+        # 2. matches the stats/metadata footer line (**[emoji](url) counts...**) to discard it
+        text_blobs = re.split(r"\n\n> *\*\*\[[^\n]*\n>[^\n]*\n> *|\n\n\*\*[^\n]*\*\*\s*", description)
 
         # remove empty blobs that may occur due to regex split
         for i, blob in enumerate(text_blobs):
@@ -295,17 +298,12 @@ async def process_embed(embed, is_manual: bool) -> str | None:
             where there are more than 2 that is NOT an error, this should be changed to 
             a loop but until then I think this is easier to read and understand. So, for 
             now, any extra blobs that may occur will be logged and ignored.
-
-            TODO: add handling for 'attached' tweets (these are rare, and i need a better 
-            example with text to test with, but basically need to handle a slightly 
-            different format but it should be similar to quoted tweets)
         """
-        # TODO: new fxtwitter formatting changes how attached tweets and quoted tweets are formatted,
-        # this might be a trickier issue but hopefully regex can save the day.
 
         logging.info(f'Raw Description Text Blobs: {text_blobs}')
         translation = ''
 
+        # TODO: decide on any output formatting changes
         temp_translation = await translate_text(text_blobs[0], is_manual)
         if temp_translation:
             translation = "\U0001F4C4 " + temp_translation
@@ -317,7 +315,7 @@ async def process_embed(embed, is_manual: bool) -> str | None:
                 translation += "\n\n\U0001F4AC " + temp_translation
                 logging.info('Quoted text found and translated')
 
-        if len(text_blobs) > 2:  # aforementioned handling of unexpected extra blobs
+        if len(text_blobs) > 2:  # aforementioned handling of unexpected extra blobs (this shouldn't happen)
             logging.error(f'Unexpected Text Blob(s): {text_blobs[2:]}')
 
         if translation.strip():
