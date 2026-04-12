@@ -284,7 +284,7 @@ async def process_embed(embed, is_manual: bool) -> str | None:
         # two main cases to handle:
         # 1. matches the full quoting header block: the \n\n> **[...]...** line plus the following '>'s
         # 2. matches the stats/metadata footer line (**[emoji](url) counts...**) to discard it
-        text_blobs = re.split(r"\n\n> *\*\*\[[^\n]*\n>[^\n]*\n> *|\n\n\*\*[^\n]*\*\*\s*", description)
+        text_blobs = re.split(r"\n\n> *\*\*\[[^\n]*\n>[^\n]*\n>* |\n*\*\*[^\n]*\*\*\s*", description)
 
         # remove empty blobs that may occur due to regex split
         for i, blob in enumerate(text_blobs):
