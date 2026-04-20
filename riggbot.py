@@ -4,9 +4,11 @@ import discord
 import logging
 import os
 import re
+import json
 from dotenv import load_dotenv
 from googletrans import Translator
 from logging.handlers import RotatingFileHandler
+from discord.ext import commands
 
 # Load .env variables
 load_dotenv()
@@ -18,6 +20,9 @@ DEST_LANG = None
 MANUAL_OVERRIDE_LANG = None
 client: discord.Client | None = None
 translator = None
+
+# Flag unicodes to language codes mapping
+flag_lang_map = None
 
 # Keyword triggers dictionary
 KEYWORD_RESPONSES = {
@@ -44,7 +49,8 @@ def init_logging():
             logging.StreamHandler(),    # console
             # File handler with rotation, and will create a backup log file `riggbot.log.1`.
             # not sure if thats overkill or not, but i mean its at most 2MB so probably fine
-            RotatingFileHandler('riggbot.log', maxBytes=1_000_000, backupCount=1)
+            RotatingFileHandler(
+                'riggbot.log', maxBytes=1_000_000, backupCount=1)
         ]
     )
     # these just effectively silence overly verbose logs from underlying libraries
@@ -68,7 +74,24 @@ def init_bot():
     logging.info(f'Using intents: {intents}')
 
     # Initialize Discord client and register event handlers
-    client = discord.Client(intents=intents)
+    client = commands.Bot(command_prefix='!', intents=intents)
+
+    # Register slash commands
+    @client.tree.command(name='ping', description='Check bot latency')
+    async def ping(interaction: discord.Interaction):
+        await interaction.response.send_message(f'Pong! {round(client.latency * 1000)}ms')
+
+    @client.tree.command(name='edit_flag_lang', description='Add or update a flag to language mapping')
+    async def edit_flag_lang(interaction: discord.Interaction, flag: str, lang_code: str):
+        logging.info(
+            f'Edit flag lang command received with flag: {flag} and lang_code: {lang_code}')
+        flag_lang_map[flag] = lang_code
+        with open('flag_lang_map.json', 'w', encoding='utf-8') as f:
+            json.dump(flag_lang_map, f, ensure_ascii=False, indent=4)
+            logging.info(
+                f'Updated flag_lang_map.json with flag: {flag} and lang_code: {lang_code}')
+        await interaction.response.send_message('flag: ' + flag + ' assigned to lang_code: ' + lang_code, silent=True)
+
     try:
         client.event(on_ready)
         logging.info('Registered on_ready handler (event)')
@@ -86,6 +109,11 @@ def init_bot():
 
     # Load env vars
     TOKEN = bot_token()
+    init_env_vars()
+
+
+def init_env_vars():
+    global EMBED_BOT_NAME, DEST_LANG, MANUAL_OVERRIDE_LANG, flag_lang_map
 
     # For provided env var, if it exists, strip and return, otherwise return default
     # also returns a boolean indicating whether the default was used for logging
@@ -114,6 +142,17 @@ def init_bot():
             'MANUAL_OVERRIDE_LANG not set in .env; defaulting to "zh-CN"')
     logging.info(f'MANUAL_OVERRIDE_LANG: "{MANUAL_OVERRIDE_LANG}"')
 
+    # Load flag language mapping based on provided flag_lang_map.json
+    try:
+        with open('flag_lang_map.json', 'r', encoding='utf-8') as f:
+            flag_lang_map = json.load(f)
+        logging.info('Loaded flag language mapping from flag_lang_map.json')
+    except FileNotFoundError:
+        logging.warning(
+            'flag_lang_map.json not found; flag-based language detection disabled')
+    except json.JSONDecodeError as e:
+        logging.error(f'Error decoding flag_lang_map.json: {e}')
+
 
 def bot_token() -> str:  # Load bot token from .env file
     raw = os.getenv('RIGGBOT_TOKEN')
@@ -140,9 +179,14 @@ def run_bot():
 # endregion
 
 
-# region: Discord Event Handlers and Reply Handler
+# region: Discord Event Handlers
 async def on_ready():
-    logging.info(f'{client.user} is online\n===========================================================\n')
+    # replace with your server's ID
+    guild = discord.Object(id=968236034250924052)
+    client.tree.copy_global_to(guild=guild)
+    await client.tree.sync(guild=guild)
+    logging.info(
+        f'{client.user} is online\n===========================================================\n')
 
 
 async def on_message(message):
@@ -158,9 +202,8 @@ async def on_message(message):
     if EMBED_BOT_NAME and EMBED_BOT_NAME in message.author.name.lower():
         logging.info(
             f'Message from embed bot "{message.author.name}" detected')
-        await process_message(message, is_manual=False)
+        await process_message(message)
         logging.info('Handled automatic translation trigger from embed bot\n')
-        
 
     # If this message is a reply, handle it separately
     try:
@@ -179,9 +222,9 @@ async def on_message(message):
     if message.author.name != 'riggoon' and message.author.name != 'sarcly':
         return
 
-    # these are ""commands"" only accessible to certain users. 
-    # this is irresponsibly implemented."
-    if 'say goodbye riggbot' in message.content.lower():
+    # these are ""commands"" only accessible to certain users.
+    # this is irresponsibly implemented.
+    if 'say goodbye riggbot' in message.content.lower() or 'riggbot, kys' in message.content.lower():
         await message.channel.send('Goodbye! \U0001F44B', silent=True)
         await client.close()
 
@@ -212,6 +255,16 @@ async def on_reaction_add(reaction, user):
         await process_message(msg, is_manual=True)
         logging.info('Handled manual translation trigger from reaction\n')
 
+    # check if the reaction is a flag emoji for language selection
+    if reaction.emoji in flag_lang_map and reaction.count == 1:
+        lang_code = flag_lang_map[reaction.emoji]
+        logging.info(
+            f'Manual source override translation trigger detected for language: {lang_code}')
+        msg = reaction.message
+        await process_message(msg, is_manual=True, src_lang=lang_code)
+        logging.info(
+            'Handled manual source lang override translation trigger from reaction\n')
+
 
 async def handle_reply(message):
     msg_content = message.content.lower()
@@ -241,9 +294,10 @@ async def handle_reply(message):
 
 # endregion
 
-
 # region: Message Processing and Translation Logic
-async def process_message(message, is_manual: bool):
+
+
+async def process_message(message, is_manual: bool = False, src_lang: str = None):
     logging.info(f'Handling message translation (manual={is_manual})')
     translations = []
     # multiple attempts to make sure it gets the embed on a recent message
@@ -259,13 +313,13 @@ async def process_message(message, is_manual: bool):
             await asyncio.sleep(delay)
 
     if embeds:
-        emb_trans = await process_embed(embeds[0], is_manual)
+        emb_trans = await process_embed(embeds[0], is_manual, src_lang)
         if emb_trans:
             translations.append(emb_trans)
             logging.info('Message embed translated')
 
     elif message.content:
-        con_trans = await translate_text(message.content, is_manual)
+        con_trans = await translate_text(message.content, is_manual, src_lang)
         if con_trans:
             translations.append(con_trans)
             logging.info('Message content translated')
@@ -276,7 +330,7 @@ async def process_message(message, is_manual: bool):
         await message.reply('Sorry, I couldn\'t find anything to translate in that', silent=True)
 
 
-async def process_embed(embed, is_manual: bool) -> str | None:
+async def process_embed(embed, is_manual: bool = False, src_lang: str = None) -> str | None:
     description = embed.to_dict().get("description")
     logging.info(f'Raw embed description: {description}')
     if description:
@@ -284,7 +338,8 @@ async def process_embed(embed, is_manual: bool) -> str | None:
         # two main cases to handle:
         # 1. matches the full quoting header block: the \n\n> **[...]...** line plus the following '>'s
         # 2. matches the stats/metadata footer line (**[emoji](url) counts...**) to discard it
-        text_blobs = re.split(r"\n\n> *\*\*\[[^\n]*\n>[^\n]*\n>* |\n*\*\*[^\n]*\*\*\s*", description)
+        text_blobs = re.split(
+            r"\n\n> *\*\*\[[^\n]*\n>[^\n]*\n>* |\n*\*\*[^\n]*\*\*\s*", description)
 
         # remove empty blobs that may occur due to regex split
         for i, blob in enumerate(text_blobs):
@@ -304,13 +359,13 @@ async def process_embed(embed, is_manual: bool) -> str | None:
         logging.info(f'Raw Description Text Blobs: {text_blobs}')
         translation = ''
 
-        temp_translation = await translate_text(text_blobs[0], is_manual)
+        temp_translation = await translate_text(text_blobs[0], is_manual, src_lang)
         if temp_translation:
             translation = "\U0001F4C4 " + temp_translation
             logging.info('Main description text translated')
 
         if len(text_blobs) > 1:
-            temp_translation = await translate_text(text_blobs[1], is_manual)
+            temp_translation = await translate_text(text_blobs[1], is_manual, src_lang)
             if temp_translation:
                 translation += "\n\n\U0001F4AC " + temp_translation
                 logging.info('Quoted text found and translated')
@@ -324,13 +379,14 @@ async def process_embed(embed, is_manual: bool) -> str | None:
             return None
 
 
-async def translate_text(text: str, is_manual: bool) -> str | None:
+async def translate_text(text: str, is_manual: bool = False, src_lang: str = None) -> str | None:
     """Core translation function that detects the language of the input text and 
         translates it to the destination language if needed.
 
     Args:
         text: The text content to translate
         is_manual: Whether this is a manual translation trigger
+        src_lang: The source language for manual override translation
 
     Returns:
         Translated string or None if no translation needed
@@ -343,9 +399,11 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
         # Replace markdown links with just their display text before translation
         # its before translation mostly for #, but if an @ gets translated, itd prob be funny
         text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+        logging.info(f'Text after markdown link removal: {text}')
 
         detected = await translator.detect(text)
-        logging.info(f'Detected language: {detected.lang} (confidence: {detected.confidence})')
+        logging.info(
+            f'Detected language: {detected.lang} (confidence: {detected.confidence})')
 
         if detected.lang != DEST_LANG:
             # need to translate
@@ -356,13 +414,20 @@ async def translate_text(text: str, is_manual: bool) -> str | None:
 
         elif is_manual:
             # if manual and already in dest lang, translate to override lang
+            # if manual and src_lang given, translate to dest_lang from src_lang
+
             # TODO: the logging for manual override translation trigger is... inconsistent? I'm really not sure
             # why/how but sometimes even though it properly translates to the override language, the logging just
-            # does not trigger, even the logging higher up in the call stack for the universal processing steps 
+            # does not trigger, even the logging higher up in the call stack for the universal processing steps
             # very very strange interaction but the actual functionality seems to work fine, so im leaving it for now
-            logging.info(
-                f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
-            translated = await translator.translate(text, dest=MANUAL_OVERRIDE_LANG)
+            if src_lang:
+                logging.info(
+                    f'Override: translating from {src_lang} to {DEST_LANG}')
+                translated = await translator.translate(text, src=src_lang, dest=DEST_LANG)
+            else:
+                logging.info(
+                    f'Override: translating from {DEST_LANG} to {MANUAL_OVERRIDE_LANG}')
+                translated = await translator.translate(text, dest=MANUAL_OVERRIDE_LANG)
             translation = translated.text
 
         if translation:
