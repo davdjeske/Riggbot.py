@@ -181,10 +181,7 @@ def run_bot():
 
 # region: Discord Event Handlers
 async def on_ready():
-    # replace with your server's ID
-    guild = discord.Object(id=968236034250924052)
-    client.tree.copy_global_to(guild=guild)
-    await client.tree.sync(guild=guild)
+    await client.tree.sync()
     logging.info(
         f'{client.user} is online\n===========================================================\n')
 
