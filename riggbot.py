@@ -67,6 +67,14 @@ def init_bot():
 
     global client, translator, TOKEN, EMBED_BOT_NAME, DEST_LANG, MANUAL_OVERRIDE_LANG
 
+    # Load env vars
+    TOKEN = bot_token()
+    init_env_vars()
+
+    # Initialize translator (googletrans)
+    translator = Translator()
+    logging.info('Translator initialized.')
+
     intents = discord.Intents.default()
     intents.message_content = True
     intents.reactions = True
@@ -102,14 +110,6 @@ def init_bot():
     except Exception as e:
         # If handlers are not yet defined at init time, log the exception for visibility
         logging.exception(f'Error registering listeners: {e}')
-
-    # Initialize translator (googletrans)
-    translator = Translator()
-    logging.info('Translator initialized.')
-
-    # Load env vars
-    TOKEN = bot_token()
-    init_env_vars()
 
 
 def init_env_vars():
@@ -176,14 +176,32 @@ def run_bot():
     logging.info('Starting Discord client...')
     client.run(TOKEN)
 
+# crude translator test on launch to see if translation is operational
+
+
+async def translation_test():
+    try:
+        async with Translator() as translator:
+            translated_test = await translator.translate('hallo', dest='en', src='de')
+            if translated_test.text.lower() == 'hello':
+                logging.info('Translation test passed')
+            else:
+                logging.warning(
+                    'Translation test failed, translation functionality will likely be impaired')
+    except Exception as e:
+        logging.error(f'Translation error: {e}')
+
 # endregion
 
 
 # region: Discord Event Handlers
 async def on_ready():
+    # quick check for translations, its here because the rest of launch/init isnt async
+    await translation_test()
     await client.tree.sync()
     logging.info(
         f'{client.user} is online\n===========================================================\n')
+    
 
 
 async def on_message(message):
@@ -193,14 +211,30 @@ async def on_message(message):
     if message.webhook_id is not None:  # ignore webhook messages
         return
 
+    
+    # LatiBot banter
+    
+    # dat me mocking response
+    if 'latibot' in message.author.name.lower() and message.content.lower() == 'dat me!!':
+        await message.reply('latibot→en:\nim a dumb bitch', silent=True)
+
+    # latibot mocking deletion
+    if 'latibot' in message.author.name.lower() and  '\"iM rIgGbOt!\"' in message.content:
+        await message.channel.send('shut up nerd', silent=True)
+
+
+
     # TODO: further refine filtering and avoid processing non-relevant messages
 
-    # TODO: latibot non embed message filter
     if EMBED_BOT_NAME and EMBED_BOT_NAME in message.author.name.lower():
-        logging.info(
-            f'Message from embed bot "{message.author.name}" detected')
-        await process_message(message)
-        logging.info('Handled automatic translation trigger from embed bot\n')
+        embeds = await get_embeds(message)
+        if embeds:
+            logging.info(
+                f'Message from embed bot "{message.author.name}" detected')
+            # passes found embeds to skip otherwise redundant retrieval in process_message()
+            await process_message(message, False, None, embeds)
+            logging.info(
+                'Handled automatic embed translation trigger from embed bot\n')
 
     # If this message is a reply, handle it separately
     try:
@@ -222,7 +256,7 @@ async def on_message(message):
     # these are ""commands"" only accessible to certain users.
     # this is irresponsibly implemented.
     if 'say goodbye riggbot' in message.content.lower() or 'riggbot, kys' in message.content.lower():
-        await message.channel.send('Goodbye! \U0001F44B', silent=True)
+        await message.channel.send(random.choice(['Goodbye! \U0001F44B', 'I\'m riggbo- oh... okay...']), silent=True)
         await client.close()
 
     if 'riggbot' in content_lower:
@@ -285,19 +319,12 @@ async def handle_reply(message):
     if 'riggbot is this true' in msg_content or '<@1293252648803237899> is this true' in msg_content:
         logging.info('Analyzing if true')
         if ref_msg.author != client.user:
-            await message.reply(random.choice(['Yes', 'No']), silent=True)
+            await message.reply(random.choice(['Yes', 'No', 'Israel']), silent=True)
             # TODO: add more replies here
             logging.info('Delivered the truth\n')
 
-# endregion
 
-# region: Message Processing and Translation Logic
-
-
-async def process_message(message, is_manual: bool = False, src_lang: str = None):
-    logging.info(f'Handling message translation (manual={is_manual})')
-    translations = []
-    # multiple attempts to make sure it gets the embed on a recent message
+async def get_embeds(message):
     embeds = None
     max_attempts = 5
     delay = 0.5  # seconds between attempts
@@ -308,6 +335,19 @@ async def process_message(message, is_manual: bool = False, src_lang: str = None
             break
         if attempt < max_attempts - 1:
             await asyncio.sleep(delay)
+    return embeds
+
+# endregion
+
+# region: Message Processing and Translation Logic
+
+
+async def process_message(message, is_manual: bool = False, src_lang: str = None, embeds=None):
+    logging.info(f'Handling message translation (manual={is_manual})')
+    translations = []
+    # if no embeds are passsed, attempts to retreive them
+    if not embeds:
+        embeds = await get_embeds(message)
 
     if embeds:
         emb_trans = await process_embed(embeds[0], is_manual, src_lang)
