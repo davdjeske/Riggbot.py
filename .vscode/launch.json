@@ -1,0 +1,55 @@
+{
+    // Run and Debug (F5). Needs the Python Debugger extension (ms-python.debugpy).
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Riggbot",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "riggbot",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": { "PYTHONUTF8": "1" },
+            "justMyCode": true
+        },
+        {
+            "name": "Riggbot (debug logs)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "riggbot",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": { "PYTHONUTF8": "1", "LOG_LEVEL": "DEBUG" },
+            "justMyCode": true
+        },
+        {
+            "name": "Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["-q"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Tests: current file",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["-q", "${file}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            // Used by the Test Explorer's "Debug Test" button.
+            "name": "Debug test (Test Explorer)",
+            "type": "debugpy",
+            "request": "launch",
+            "purpose": ["debug-test"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

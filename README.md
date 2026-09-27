@@ -45,6 +45,8 @@ A Discord bot for a server of friends: translations on request, keyword triggers
 4. **Settings:** copy `config.example.json` to `config.json` and set at least `owner_ids` (your Discord user ID: *Settings → Advanced → Developer Mode*, then right-click yourself → *Copy User ID*). Setting `latibot.user_id` is recommended too.
 5. **Run:** `start.bat`, or `.venv\Scripts\python.exe main.py` (same as `python -m riggbot`).
 
+**In VS Code:** run the task *Set up environment* (Terminal → Run Task…) to create `.venv` and install everything. Then use Ctrl+Shift+B (*Run riggbot*), or F5 with the *Riggbot* launch config to run it under the debugger. There are also tasks and launch configs for debug-level logs, the tests, and building the exe.
+
 Everything the bot reads and writes lives next to it: `.env`, `config.json`, `data/` (triggers, approved bots, flags) and `logs/`.
 
 ## Configuration

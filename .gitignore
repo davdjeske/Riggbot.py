@@ -11,7 +11,10 @@ riggbot.log*
 .venv
 __pycache__/
 .pytest_cache/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/settings.json
 
 # PyInstaller
 build/

@@ -1,0 +1,7 @@
+{
+    // Use the project's .venv unless you pick another interpreter (Python: Select Interpreter).
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": ["tests"]
+}
