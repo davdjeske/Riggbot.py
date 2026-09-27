@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 from googletrans import Translator
 from logging.handlers import RotatingFileHandler
 from discord.ext import commands
+from . import paths
+
+# Transitional: this module is being replaced by the riggbot package (see CLEANUP_PLAN.md).
+# Run it with `python -m riggbot.legacy` until the cogs take over.
+FLAG_MAP_PATH = paths.defaults_dir() / 'flag_lang_map.json'
 
 # Load .env variables
 load_dotenv()
@@ -94,7 +99,7 @@ def init_bot():
         logging.info(
             f'Edit flag lang command received with flag: {flag} and lang_code: {lang_code}')
         flag_lang_map[flag] = lang_code
-        with open('flag_lang_map.json', 'w', encoding='utf-8') as f:
+        with open(FLAG_MAP_PATH, 'w', encoding='utf-8') as f:
             json.dump(flag_lang_map, f, ensure_ascii=False, indent=4)
             logging.info(
                 f'Updated flag_lang_map.json with flag: {flag} and lang_code: {lang_code}')
@@ -144,7 +149,7 @@ def init_env_vars():
 
     # Load flag language mapping based on provided flag_lang_map.json
     try:
-        with open('flag_lang_map.json', 'r', encoding='utf-8') as f:
+        with open(FLAG_MAP_PATH, 'r', encoding='utf-8') as f:
             flag_lang_map = json.load(f)
         logging.info('Loaded flag language mapping from flag_lang_map.json')
     except FileNotFoundError:

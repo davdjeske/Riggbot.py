@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-import riggbot
+from riggbot import legacy as riggbot
 
 BOT_ID = 1293252648803237899
 IS_THIS_TRUE_ANSWERS = {'Yes', 'No', 'Israel'}

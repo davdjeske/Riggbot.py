@@ -1,0 +1,48 @@
+{
+  "owner_ids": [],
+  "latibot": {
+    "user_id": null,
+    "name_fallback": "latibot"
+  },
+  "responses": {
+    "is_this_true": {
+      "phrases": ["riggbot is this true"],
+      "match_mention": true,
+      "answers": ["Yes", "No", "Israel"]
+    },
+    "star_thanks": "omg thank you so much",
+    "latibot_banter": {
+      "dat_me_trigger": "dat me!!",
+      "dat_me_reply": "latibot→en:\nim a dumb bitch",
+      "mock_trigger": "\"iM rIgGbOt!\"",
+      "mock_reply": "shut up nerd"
+    },
+    "shutdown": {
+      "phrases": ["say goodbye riggbot", "riggbot, kys"],
+      "farewells": ["Goodbye! 👋", "I'm riggbo- oh... okay..."]
+    }
+  },
+  "translation": {
+    "providers": ["deepl", "googletrans", "libretranslate"],
+    "dest_lang": "en",
+    "manual_override_lang": "zh-CN",
+    "startup_self_test": true,
+    "breaker": {
+      "failures": 3,
+      "cooldown_minutes": 10
+    },
+    "reaction_cooldown_seconds": 30,
+    "libretranslate": {
+      "url": "http://localhost:5000"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file_level": "DEBUG",
+    "library_level": "WARNING",
+    "color": "auto",
+    "file": "logs/riggbot.log",
+    "max_bytes": 1000000,
+    "backup_count": 3
+  }
+}

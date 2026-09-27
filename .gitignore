@@ -1,10 +1,18 @@
-
-riggbot token.txt
-riggbot.log*
-.venv
+# Secrets and local settings
 .env
-.vscode/
+config.json
+
+# Runtime state and logs
+data/
+logs/
+riggbot.log*
+
+# Python / tooling
+.venv
 __pycache__/
 .pytest_cache/
+.vscode/
+
+# PyInstaller
 build/
 dist/

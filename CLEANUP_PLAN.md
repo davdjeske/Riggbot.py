@@ -345,7 +345,9 @@ Draft `config.example.json`. The `responses` values shown as `"…"` are today's
 
 ## 8. Phases
 
-Each phase is one or more commits on `mh-riggbot`. The bot stays runnable at the end of every phase.
+Each phase is one or more commits on `mh-riggbot`. Checked boxes are done.
+
+**Transition note:** until Phase 3 is finished, the old bot lives on as `riggbot/legacy.py` (run it with `python -m riggbot.legacy`), and `tests/test_riggbot.py` / `tests/test_characterization.py` test it. When the cogs replace it, port the characterization tests to the cogs and delete the legacy module and its tests. The new entry point is `python main.py` (or `python -m riggbot`).
 
 ### Phase 0: Safety net
 - [x] Fix the 2 stale tests (the `\n` after the language arrow).
@@ -356,11 +358,11 @@ Each phase is one or more commits on `mh-riggbot`. The bot stays runnable at the
 - [x] These tests move with the code in later phases and must keep passing. They are the proof that C1 and C2 hold.
 
 ### Phase 1: Foundation (package, config, logging, storage)
-- [ ] Create the `riggbot/` package, `main.py`, `paths.py` and `bot.py`, with a `RiggBot` subclass. Slash-command sync and the self-test run once from `setup_hook` / first ready, not on every `on_ready`.
-- [ ] `config.py`: settings dataclasses, merge order, validation, `config.example.json`.
-- [ ] `log.py`: the §7 format and colors, levels from config and env, `log_handler=None`.
-- [ ] `storage.py`: `JsonStore` and `GuildStore` with atomic save and first-use seeding from `defaults/`.
-- [ ] `checks.py`, `messaging.py`.
+- [x] Create the `riggbot/` package, `main.py`, `paths.py` and `bot.py`, with a `RiggBot` subclass. Slash-command sync and the self-test run once from `setup_hook` / first ready, not on every `on_ready`.
+- [x] `config.py`: settings dataclasses, merge order, validation, `config.example.json`.
+- [x] `log.py`: the §7 format and colors, levels from config and env, `log_handler=None`.
+- [x] `storage.py`: `JsonStore` and `GuildStore` with atomic save and first-use seeding from `defaults/`.
+- [x] `checks.py`, `messaging.py`.
 
 ### Phase 2: Translation rework
 - [ ] `translation/` package: interface, language normalization, registry, the three providers, and the service with the provider chain, skipping of unconfigured providers, and the circuit breaker.
@@ -369,7 +371,7 @@ Each phase is one or more commits on `mh-riggbot`. The bot stays runnable at the
 - [ ] Long replies go through `send_chunked`. Give the user a distinct message when every provider fails, instead of "couldn't find anything to translate".
 
 ### Phase 3: Cogs and commands
-- [ ] `ui/pagination.py`: `Paginator` and `build_pages`.
+- [x] `ui/pagination.py`: `Paginator` and `build_pages`.
 - [ ] `translate` cog: raw reaction events, fetching the message when it isn't cached. Keep the "first reaction only" rule, and add the per-message cooldown (D5). Keep the `'trans' in content` reply trigger as is, and fetch the replied-to message only when a trigger matches. Handle deleted or missing replied-to messages quietly.
 - [ ] `langflags` cog: `/langflags set|remove|list`, with validation. The map defaults to `{}` if the file is missing.
 - [ ] `triggers` cog: matching (§5) and `/trigger add|remove|list`.

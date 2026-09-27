@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-import riggbot
+from riggbot import legacy as riggbot
 
 
 # ---------------------------------------------------------------------------
