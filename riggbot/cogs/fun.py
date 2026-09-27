@@ -96,8 +96,10 @@ class Fun(commands.Cog):
         content = message.content.lower()
         if not any(phrase.lower() in content for phrase in shutdown.phrases):
             return
-        # Everyone else saying the phrase is ignored.
+        # Everyone else saying the phrase is ignored, but logged with their ID so a missing or
+        # wrong entry in owner_ids is easy to spot.
         if not is_owner(self.bot, message.author):
+            log.info('Shutdown phrase from %s (id=%s) ignored: not in owner_ids', message.author, message.author.id)
             return
         log.info('Shutdown requested by %s (id=%s) in %s', message.author, message.author.id,
                  describe_location(message.guild, message.channel))

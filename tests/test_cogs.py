@@ -147,11 +147,19 @@ class TestFunCog:
         assert sent_text(message.channel.send) in bot.settings.responses.shutdown.farewells
         bot.close.assert_awaited_once()
 
-    async def test_goodbye_from_non_owner_is_ignored(self, cog, bot):
+    async def test_goodbye_from_non_owner_is_ignored(self, cog, bot, caplog):
         bot.settings.owner_ids = [11]
         message = make_message('say goodbye riggbot', author=make_user(user_id=12))
-        await cog.on_message(message)
+        with caplog.at_level('INFO'):
+            await cog.on_message(message)
         bot.close.assert_not_awaited()
+        assert 'id=12) ignored: not in owner_ids' in caplog.text
+
+    async def test_goodbye_from_any_listed_owner(self, cog, bot):
+        bot.settings.owner_ids = [142409073722130432, 1170411620526981192]
+        message = make_message('say goodbye riggbot', author=make_user(user_id=1170411620526981192))
+        await cog.on_message(message)
+        bot.close.assert_awaited_once()
 
     async def test_star_thanks(self, cog, bot, monkeypatch):
         message = make_message('I am riggbot', author=bot.user, reactions=[SimpleNamespace(emoji=STAR, count=1)])
