@@ -59,9 +59,9 @@ Settings are merged in this order, later wins: **built-in defaults → `config.j
 | `latibot` | `user_id` of LatiBot; `name_fallback` (username substring) is used when no ID is set |
 | `responses` | `is_this_true` (`phrases`, where `{mention}` means an @riggbot mention, and `answers`), `star_thanks`, `latibot_banter`, `shutdown` (`phrases`, `farewells`) |
 | `translation` | `providers` (order to try), `dest_lang`, `manual_override_lang`, `startup_self_test`, `breaker`, `reaction_cooldown_seconds`, `libretranslate.url` |
-| `logging` | `level` (console), `file_level`, `library_level`, `color` (`auto`/`always`/`never`), `file`, `max_bytes`, `backup_count` |
+| `logging` | `level` (console), `file_level`, `library_level`, `color` (`auto`/`always`/`never`), `file`, `max_bytes`, `backup_count`, `discord_channel_id`, `discord_level` (see [Logging](#logging)) |
 
-Environment overrides: `DEST_LANG`, `MANUAL_OVERRIDE_LANG`, `TRANSLATION_PROVIDERS` (comma-separated), `LIBRETRANSLATE_URL`, `LOG_LEVEL`, `LOG_FILE_LEVEL`, `LOG_COLOR`, `NO_COLOR`. Secrets (`RIGGBOT_TOKEN`, `DEEPL_API_KEY`, `LIBRETRANSLATE_API_KEY`) are only read from the environment / `.env`.
+Environment overrides: `DEST_LANG`, `MANUAL_OVERRIDE_LANG`, `TRANSLATION_PROVIDERS` (comma-separated), `LIBRETRANSLATE_URL`, `LOG_LEVEL`, `LOG_FILE_LEVEL`, `LOG_COLOR`, `NO_COLOR`, `LOG_DISCORD_CHANNEL_ID` (`off` turns it off), `LOG_DISCORD_LEVEL`. Secrets (`RIGGBOT_TOKEN`, `DEEPL_API_KEY`, `LIBRETRANSLATE_API_KEY`) are only read from the environment / `.env`.
 
 ### Translation providers
 
@@ -83,6 +83,14 @@ One line per event, colored in the console:
 
 Logs are written to `logs/riggbot.log` (rotated at 1 MB, 3 backups). Message text is only logged at `debug` level. The file gets debug by default; set `logging.file_level` to `INFO` to keep message text out of it.
 
+**Log channel.** The bot can also post its logs to one Discord channel:
+
+1. Enable Developer Mode (*Settings → Advanced*), then right-click the channel → *Copy Channel ID*.
+2. In `config.json`, under `logging`, set `"discord_channel_id": 123456789012345678`. Optionally set `"discord_level"`: the lowest level to post. `"INFO"` (the default) posts info, warning, error and critical, but skips debug.
+3. Restart, or run `/reload`.
+
+Only one channel, in one server, can be set. The bot needs permission to view and send messages there. Lines are collected and posted every few seconds as a colored code block. If they come in faster than Discord allows, the oldest are dropped and the next post says how many. If the channel can't be found or used, a warning is logged and posting stops until the next `/reload`. Setting `discord_level` to `"DEBUG"` posts message text too, so pick a private channel.
+
 ## Development
 
 ```powershell
@@ -100,6 +108,7 @@ riggbot/
   bot.py                RiggBot: startup, shared services, slash-command error handling
   config.py             settings dataclasses and loading
   log.py                log format and setup
+  log_channel.py        posts logs to a Discord channel
   storage.py            JsonStore (one file) and GuildStore (one document per server)
   messaging.py          send long messages, resolve replies, fetch reacted-to messages
   checks.py             owner_only() for slash commands

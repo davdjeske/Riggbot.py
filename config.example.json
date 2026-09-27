@@ -42,6 +42,8 @@
     "color": "auto",
     "file": "logs/riggbot.log",
     "max_bytes": 1000000,
-    "backup_count": 3
+    "backup_count": 3,
+    "discord_channel_id": null,
+    "discord_level": "INFO"
   }
 }

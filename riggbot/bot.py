@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from . import __version__, config, paths
 from .config import ConfigError, Secrets, Settings
 from .log import setup_logging
+from .log_channel import DiscordLogHandler
 from .messaging import SAFE_MENTIONS
 from .storage import GuildStore, JsonStore, read_default
 from .translation import TranslationService, build_providers
@@ -68,10 +69,24 @@ class RiggBot(commands.Bot):
         # Starts with no providers; setup_hook() creates them. The lambda means the service always
         # sees the *current* settings, even after /reload replaces them.
         self.translation = TranslationService([], lambda: self.settings.translation)
+        # Posts logs to a Discord channel if config.json sets one. Lines logged before the bot
+        # connects are kept and posted once it has.
+        self.log_channel = DiscordLogHandler(self)
+        self.apply_logging_settings()
         self._has_been_ready = False    # to tell the first on_ready apart from reconnects
+
+    def apply_logging_settings(self) -> None:
+        """(Re)configure logging from the current settings, including the Discord log channel."""
+        settings = self.settings.logging
+        self.log_channel.configure(settings.discord_channel_id, settings.discord_level)
+        extra = [self.log_channel] if settings.discord_channel_id else []
+        setup_logging(settings, self.base_dir, extra)
 
     async def setup_hook(self) -> None:
         """Runs once, after logging in and before connecting. discord.py calls it for us."""
+        # 0. Start posting to the log channel (it waits until the bot is connected).
+        self.log_channel.start()
+
         # 1. Translation providers (DeepL, googletrans, ...) as listed in config.
         await self.translation.replace_providers(build_providers(self.settings, self.secrets))
         if self.settings.translation.startup_self_test and self.translation.enabled:
@@ -88,7 +103,8 @@ class RiggBot(commands.Bot):
         log.info('Synced %d slash commands: %s', len(synced), ', '.join(f'/{c.name}' for c in synced) or '(none)')
 
     async def close(self) -> None:
-        """Shut down: close translation network connections, then disconnect from Discord."""
+        """Shut down: post the last log lines, close translation connections, then disconnect."""
+        await self.log_channel.aclose()
         await self.translation.aclose()
         await super().close()
 
@@ -140,7 +156,7 @@ class RiggBot(commands.Bot):
         # If config.json is invalid this raises ConfigError before anything is changed.
         settings = config.load_settings(self.base_dir / 'config.json', os.environ)
         self.settings = settings
-        setup_logging(settings.logging, self.base_dir)
+        self.apply_logging_settings()
         self.guild_store.reload()
         self.flag_store.reload()
         await self.translation.replace_providers(build_providers(settings, self.secrets))
@@ -172,8 +188,14 @@ def main() -> None:
         print(f'Configuration error: {e}', file=sys.stderr)
         sys.exit(1)
 
+    # Riggbot never joins voice channels; skip discord.py's warnings about missing voice libraries.
+    discord.VoiceClient.warn_nacl = False
+    discord.VoiceClient.warn_dave = False
+
+    # Creating the bot also sets up logging (console, file, and the Discord log channel if set).
+    bot = RiggBot(settings, secrets, base_dir)
+
     # From here on, use the log. Start with a summary of what the bot is running with.
-    setup_logging(settings.logging, base_dir)
     log.info('Starting riggbot %s (Python %s, discord.py %s)', __version__, sys.version.split()[0],
              discord.__version__)
     log.info('Base directory: %s', base_dir)
@@ -182,11 +204,6 @@ def main() -> None:
         log.warning(warning)
     log.info('Config: %s', config.summary(settings, secrets))
 
-    # Riggbot never joins voice channels; skip discord.py's warnings about missing voice libraries.
-    discord.VoiceClient.warn_nacl = False
-    discord.VoiceClient.warn_dave = False
-
-    bot = RiggBot(settings, secrets, base_dir)
     try:
         # Connects to Discord and keeps running until the bot is shut down.
         # log_handler=None: logging is already configured; don't let discord.py add a second handler.

@@ -17,6 +17,7 @@ import sys
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Sequence
 
 from .config import LoggingSettings
 
@@ -39,9 +40,12 @@ LEVEL_COLORS = {
 class RiggFormatter(logging.Formatter):
     """Turns a log record into riggbot's one-line format, optionally with colors."""
 
-    def __init__(self, color: bool = False):
+    def __init__(self, color: bool = False, timestamp_color: str = _GRAY):
         super().__init__()
         self.color = color
+        # Discord's ansi code blocks don't know "bright" colors like 90, so the Discord log
+        # channel passes its own gray here.
+        self.timestamp_color = timestamp_color
 
     def format(self, record: logging.LogRecord) -> str:
         # e.g. "2026-09-27 07:32:00.123" (local time, with milliseconds)
@@ -53,7 +57,7 @@ class RiggFormatter(logging.Formatter):
 
         if self.color:
             level_color = LEVEL_COLORS.get(record.levelno, '')
-            line = (f'{_GRAY}{timestamp}{_RESET} {level_color}{level}{_RESET} '
+            line = (f'{self.timestamp_color}{timestamp}{_RESET} {level_color}{level}{_RESET} '
                     f'{_MAGENTA}{component}{_RESET} {message}')
         else:
             line = f'{timestamp} {level} {component} {message}'
@@ -73,14 +77,20 @@ def component_name(logger_name: str) -> str:
     return logger_name.removeprefix('riggbot.')
 
 
-def setup_logging(settings: LoggingSettings, base_dir: Path) -> None:
-    """(Re)configure the root logger. Safe to call again, e.g. after /reload."""
+def setup_logging(settings: LoggingSettings, base_dir: Path,
+                  extra_handlers: Sequence[logging.Handler] = ()) -> None:
+    """(Re)configure the root logger. Safe to call again, e.g. after /reload.
+
+    `extra_handlers` are handlers created elsewhere that should also get log records, such as
+    the Discord log channel (see log_channel.py). They're added as they are, not closed here.
+    """
     root = logging.getLogger()
     # Remove the handlers a previous call added (they're marked with _riggbot), so calling this
     # again doesn't print every line twice.
     for handler in [h for h in root.handlers if getattr(h, '_riggbot', False)]:
         root.removeHandler(handler)
-        handler.close()
+        if handler not in extra_handlers:
+            handler.close()
 
     # Turn level names like "INFO" into logging's numeric levels.
     console_level = logging.getLevelName(settings.level)
@@ -108,6 +118,11 @@ def setup_logging(settings: LoggingSettings, base_dir: Path) -> None:
     except OSError as e:
         # e.g. no permission to write there. Keep running with console logging only.
         file_error = e
+
+    # Any extra handlers (e.g. the Discord log channel).
+    for handler in extra_handlers:
+        handler._riggbot = True
+        handlers.append(handler)
 
     for handler in handlers:
         root.addHandler(handler)

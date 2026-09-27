@@ -107,6 +107,10 @@ class LoggingSettings:
     file: str = 'logs/riggbot.log'      # relative to the base directory
     max_bytes: int = 1_000_000          # start a new log file after about 1 MB
     backup_count: int = 3               # how many old log files to keep
+    # Also post logs to one Discord channel (right-click the channel -> Copy Channel ID).
+    # null/None = off. Only one channel, in one server, can be set.
+    discord_channel_id: int | None = None
+    discord_level: str = 'INFO'         # lowest level posted to that channel
 
 
 def _internal(default_factory):
@@ -222,6 +226,12 @@ def _apply_env(settings: Settings, env: Mapping[str, str], warnings: list[str]) 
         settings.logging.file_level = value.upper()
     if value := take('LOG_COLOR'):
         settings.logging.color = value.lower()
+    if value := take('LOG_DISCORD_CHANNEL_ID'):
+        # "off" or "0" turns channel logging off even if config.json sets a channel.
+        settings.logging.discord_channel_id = _coerce(int | None, None if value.lower() in ('off', '0') else value,
+                                                      'LOG_DISCORD_CHANNEL_ID')
+    if value := take('LOG_DISCORD_LEVEL'):
+        settings.logging.discord_level = value.upper()
 
     # Left over from the old version of the bot: harmless, but worth mentioning.
     if _env(env, 'EMBED_BOT_NAME'):
@@ -234,7 +244,7 @@ def _validate(settings: Settings) -> None:
     """Check values that have the right type but might still be unusable. Raises ConfigError."""
     # Logging: level names must be real levels (accepting any capitalization), colors a known mode.
     log = settings.logging
-    for key in ('level', 'file_level', 'library_level'):
+    for key in ('level', 'file_level', 'library_level', 'discord_level'):
         value = getattr(log, key).upper()
         if value not in LOG_LEVELS:
             raise ConfigError(f'logging.{key} must be one of {", ".join(LOG_LEVELS)} (got "{value}")')
@@ -328,4 +338,5 @@ def summary(settings: Settings, secrets: Secrets) -> str:
             f'override={tr.manual_override_lang} owners={len(settings.owner_ids)} '
             f'latibot_id={"set" if settings.latibot.user_id else "not set"} '
             f'deepl_key={"set" if secrets.deepl_api_key else "not set"} '
-            f'log_level={settings.logging.level}')
+            f'log_level={settings.logging.level} '
+            f'log_channel={settings.logging.discord_channel_id or "off"}')
