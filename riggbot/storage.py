@@ -21,9 +21,16 @@ from . import paths
 log = logging.getLogger(__name__)
 
 
-def read_default(name: str) -> Any:
-    """A fresh copy of a JSON file from the shipped defaults (riggbot/defaults/)."""
-    return copy.deepcopy(_read_default_cached(name))
+def read_default(name: str, fallback: Any = None) -> Any:
+    """A fresh copy of a JSON file from the shipped defaults (riggbot/defaults/).
+
+    If the file is missing or broken, logs an error and returns `fallback`.
+    """
+    try:
+        return copy.deepcopy(_read_default_cached(name))
+    except (OSError, ValueError) as e:
+        log.error('Could not read default file %s: %s', name, e)
+        return copy.deepcopy(fallback)
 
 
 _default_cache: dict[str, Any] = {}

@@ -36,8 +36,8 @@ class LatibotSettings:
 
 @dataclass
 class IsThisTrueSettings:
-    phrases: list[str] = field(default_factory=lambda: ['riggbot is this true'])
-    match_mention: bool = True          # also accept "@riggbot is this true"
+    # Matched anywhere in a reply, ignoring case. {mention} stands for an @riggbot mention.
+    phrases: list[str] = field(default_factory=lambda: ['riggbot is this true', '{mention} is this true'])
     answers: list[str] = field(default_factory=lambda: ['Yes', 'No', 'Israel'])
 
 

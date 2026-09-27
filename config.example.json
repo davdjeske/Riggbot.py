@@ -6,8 +6,7 @@
   },
   "responses": {
     "is_this_true": {
-      "phrases": ["riggbot is this true"],
-      "match_mention": true,
+      "phrases": ["riggbot is this true", "{mention} is this true"],
       "answers": ["Yes", "No", "Israel"]
     },
     "star_thanks": "omg thank you so much",

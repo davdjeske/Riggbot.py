@@ -1,0 +1,10 @@
+[
+  { "phrase": "beer", "response": "mmmmm beer 🍺", "match": "contains", "include_bots": true },
+  { "phrase": "weed", "response": "mmmmm weed 🍃", "match": "contains", "include_bots": true },
+  { "phrase": "awaga", "response": "waga baba bobo", "match": "contains", "include_bots": true },
+  { "phrase": "one piece", "response": "THE ONE PIECE IS REAL! 🏴‍☠️", "match": "contains", "include_bots": true },
+  { "phrase": "it just works", "response": "my old uncle ToddBot used to say that all the time...", "match": "contains", "include_bots": true },
+  { "phrase": "skyrim", "response": "my old uncle ToddBot used to release that game all the time...", "match": "contains", "include_bots": true },
+  { "phrase": "not addicted btw", "response": "<:clueless:1150947090340515880>", "match": "contains", "include_bots": true },
+  { "phrase": "riggbot", "response": "I'm riggbot! 🤖", "match": "contains", "include_bots": false }
+]

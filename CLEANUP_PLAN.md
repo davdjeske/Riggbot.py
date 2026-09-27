@@ -81,6 +81,7 @@ Riggbot/
 │  ├─ log.py                       # logging setup, color formatter, level config
 │  ├─ storage.py                   # JsonStore (single file) + GuildStore (one document per server)
 │  ├─ checks.py                    # app-command checks: owner_only
+│  ├─ cooldown.py                  # per-key cooldowns
 │  ├─ messaging.py                 # send_chunked(): split text at Discord's 2000-char limit
 │  ├─ embed_text.py                # embed description → (main, quoted) text, fixed parser
 │  ├─ ui/
@@ -133,7 +134,10 @@ These components are generic on purpose. Each one is used by more than one featu
 | `ui/pagination.py` | `Paginator`: a `discord.ui.View` with ◀ / ▶ buttons and a "page x/y" label. Only the user who ran the command can flip pages; the buttons turn off after a timeout; works with private (ephemeral) replies. `build_pages(lines, max_chars)` packs lines into pages under Discord's limits. | `/trigger list`, `/bots list`, `/langflags list` |
 | `storage.GuildStore` | Loads and saves one JSON document per server. Creates a new server's document from a default on first use, caches it in memory, and saves atomically behind a lock. Features read and write their own key (`triggers`, `approved_bots`). | triggers, bots |
 | `storage.JsonStore` | The same for a single global file | flag map |
-| `messaging.send_chunked` | Sends or replies with text of any length, split at line boundaries under 2000 characters, silent by default, with no mentions allowed unless asked | translations, trigger responses |
+| `messaging.send_chunked` / `reply` | Sends or replies with text of any length, split at line boundaries under 2000 characters, silent by default, with no mentions allowed unless asked | translations |
+| `messaging.resolve_reference` | The message a reply points to, fetched if needed; `None` if deleted | `trans` replies, "is this true" |
+| `messaging.fetch_reaction_message` / `reaction_count` | The message a raw reaction event is about, with current reaction counts | 🏳️‍⚧️/flag reactions, ⭐ |
+| `cooldown.Cooldown` | Per-key cooldowns with a length read from config | reaction translations, ⭐ |
 | `checks.owner_only` | App-command check against `owner_ids` from config | `/shutdown`, `/sync`, `/reload` |
 | `translation` registry | Maps a provider name in config to its class | all translation |
 
@@ -258,8 +262,7 @@ Draft `config.example.json`. The `responses` values shown as `"…"` are today's
   "latibot": { "user_id": null, "name_fallback": "latibot" },
   "responses": {
     "is_this_true": {
-      "phrases": ["riggbot is this true"],
-      "match_mention": true,
+      "phrases": ["riggbot is this true", "{mention} is this true"],
       "answers": ["Yes", "No", "Israel"]
     },
     "star_thanks": "omg thank you so much",
@@ -290,7 +293,7 @@ Draft `config.example.json`. The `responses` values shown as `"…"` are today's
 }
 ```
 
-- `match_mention: true` also accepts `@riggbot is this true`, with the mention built from the running bot's ID. That's today's second phrase.
+- In the "is this true" phrases, `{mention}` stands for an @riggbot mention, built from the running bot's ID. The two default phrases are exactly today's two.
 - Env var overrides: `DEST_LANG` and `MANUAL_OVERRIDE_LANG` (kept for compatibility), plus `TRANSLATION_PROVIDERS` (comma-separated), `LIBRETRANSLATE_URL`, `LOG_LEVEL`, `LOG_FILE_LEVEL`, `LOG_COLOR`, and the standard `NO_COLOR`.
 
 ---
@@ -366,25 +369,25 @@ Each phase is one or more commits on `mh-riggbot`. Checked boxes are done.
 
 ### Phase 2: Translation rework
 - [x] `translation/` package: interface, language normalization, registry, the three providers, and the service with the provider chain, skipping of unconfigured providers, and the circuit breaker.
-- [ ] Remove auto-translation of embed-bot posts and `get_embeds` polling. Retire `EMBED_BOT_NAME` with a warning if it's set.
+- [x] Remove auto-translation of embed-bot posts and `get_embeds` polling. Retire `EMBED_BOT_NAME` with a warning if it's set.
 - [x] `embed_text.py` with the two parser fixes and regression tests.
-- [ ] Long replies go through `send_chunked`. Give the user a distinct message when every provider fails, instead of "couldn't find anything to translate".
+- [x] Long replies go through `send_chunked`. Give the user a distinct message when every provider fails, instead of "couldn't find anything to translate".
 
 ### Phase 3: Cogs and commands
 - [x] `ui/pagination.py`: `Paginator` and `build_pages`.
-- [ ] `translate` cog: raw reaction events, fetching the message when it isn't cached. Keep the "first reaction only" rule, and add the per-message cooldown (D5). Keep the `'trans' in content` reply trigger as is, and fetch the replied-to message only when a trigger matches. Handle deleted or missing replied-to messages quietly.
-- [ ] `langflags` cog: `/langflags set|remove|list`, with validation. The map defaults to `{}` if the file is missing.
-- [ ] `triggers` cog: matching (§5) and `/trigger add|remove|list`.
-- [ ] `bots` cog: `/bots add|remove|list`.
-- [ ] `fun` cog: is-this-true (config-driven, `client.user.id`), LatiBot banter, ⭐ (silent), and the owner shutdown phrases gated on `owner_ids`.
-- [ ] `admin` cog: `/ping`, and owner-only `/shutdown`, `/sync` and `/reload`.
+- [x] `translate` cog: raw reaction events, fetching the message when it isn't cached. Keep the "first reaction only" rule, and add the per-message cooldown (D5). Keep the `'trans' in content` reply trigger as is, and fetch the replied-to message only when a trigger matches. Handle deleted or missing replied-to messages quietly.
+- [x] `langflags` cog: `/langflags set|remove|list`, with validation. The map defaults to `{}` if the file is missing.
+- [x] `triggers` cog: matching (§5) and `/trigger add|remove|list`.
+- [x] `bots` cog: `/bots add|remove|list`.
+- [x] `fun` cog: is-this-true (config-driven, `client.user.id`), LatiBot banter, ⭐ (silent), and the owner shutdown phrases gated on `owner_ids`.
+- [x] `admin` cog: `/ping`, and owner-only `/shutdown`, `/sync` and `/reload`.
 
 ### Phase 4: Tooling and docs
 - [ ] `requirements.txt` (runtime: `discord.py`, `python-dotenv`, `googletrans`, `deepl`, `httpx`) and `requirements-dev.txt`, with versions pinned to known-good releases.
 - [ ] CI: a test job on push and PR using **Python 3.14** (D6). Update the actions to current major versions. Keep the PyInstaller job as manual-dispatch, on a PyInstaller release that supports 3.14.
 - [ ] `riggbot.spec`: new entry point `main.py`, and bundle `riggbot/defaults/`.
 - [ ] `start.bat`: `cd` to the script's own folder and use `.venv` if it exists.
-- [ ] `.gitignore`: add `config.json`, `data/` and `logs/`; remove `riggbot token.txt`.
+- [x] `.gitignore`: add `config.json`, `data/` and `logs/`; remove `riggbot token.txt`.
 - [ ] `.env.example` holds secrets only.
 - [ ] Rewrite the README:
   - Features, including the deliberate `trans` behavior (C2).

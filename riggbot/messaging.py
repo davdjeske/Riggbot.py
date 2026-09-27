@@ -1,5 +1,9 @@
-"""Helpers for sending messages that respect Discord's limits."""
+"""Helpers for sending and looking up messages."""
+import logging
+
 import discord
+
+log = logging.getLogger(__name__)
 
 MESSAGE_LIMIT = 2000
 
@@ -49,3 +53,45 @@ async def send_chunked(channel: discord.abc.Messageable, text: str, *, reply_to:
 async def reply(message: discord.Message, text: str, **kwargs) -> list[discord.Message]:
     """Reply to `message` with `text` of any length (see send_chunked)."""
     return await send_chunked(message.channel, text, reply_to=message, **kwargs)
+
+
+def is_reply(message: discord.Message) -> bool:
+    return message.type == discord.MessageType.reply and message.reference is not None
+
+
+async def resolve_reference(message: discord.Message) -> discord.Message | None:
+    """The message `message` replies to, fetching it if needed. None if it's gone or unreachable."""
+    reference = message.reference
+    if reference is None:
+        return None
+    resolved = reference.resolved
+    if isinstance(resolved, discord.DeletedReferencedMessage):
+        return None
+    if resolved is not None:
+        return resolved
+    if reference.message_id is None:
+        return None
+    try:
+        return await message.channel.fetch_message(reference.message_id)
+    except discord.HTTPException as e:     # deleted, or no access
+        log.debug('Could not fetch replied-to message %s: %s', reference.message_id, e)
+        return None
+
+
+async def fetch_reaction_message(bot: discord.Client,
+                                 payload: discord.RawReactionActionEvent) -> discord.Message | None:
+    """Fetch the message a raw reaction event is about, with up-to-date reaction counts."""
+    try:
+        channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
+        return await channel.fetch_message(payload.message_id)
+    except discord.HTTPException as e:
+        log.debug('Could not fetch reacted-to message %s: %s', payload.message_id, e)
+        return None
+
+
+def reaction_count(message: discord.Message, emoji: str) -> int:
+    """How many users reacted to `message` with `emoji` (as text, e.g. '⭐')."""
+    for reaction in message.reactions:
+        if str(reaction.emoji) == emoji:
+            return reaction.count
+    return 0

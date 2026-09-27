@@ -5,6 +5,7 @@ listed in EXTENSIONS. Cogs reach shared services through the bot:
 
     self.bot.settings       current Settings (replaced on /reload, so don't keep a copy)
     self.bot.guild_store    per-server JSON data
+    self.bot.flag_store     flag emoji -> language code map
     self.bot.translation    TranslationService
 """
 import asyncio
@@ -22,12 +23,19 @@ from . import __version__, config, paths
 from .config import ConfigError, Secrets, Settings
 from .log import setup_logging
 from .messaging import SAFE_MENTIONS
-from .storage import GuildStore
+from .storage import GuildStore, JsonStore, read_default
 from .translation import TranslationService, build_providers
 
 log = logging.getLogger(__name__)
 
-EXTENSIONS: list[str] = []
+EXTENSIONS = [
+    'riggbot.cogs.admin',
+    'riggbot.cogs.bots',
+    'riggbot.cogs.fun',
+    'riggbot.cogs.langflags',
+    'riggbot.cogs.translate',
+    'riggbot.cogs.triggers',
+]
 
 
 class RiggBot(commands.Bot):
@@ -45,6 +53,8 @@ class RiggBot(commands.Bot):
         self.base_dir = base_dir
         self.data_dir = base_dir / 'data'
         self.guild_store = GuildStore(self.data_dir / 'guilds')
+        self.flag_store = JsonStore(self.data_dir / 'flag_lang_map.json',
+                                    initial=lambda: read_default('flag_lang_map.json', fallback={}))
         self.translation = TranslationService([], lambda: self.settings.translation)
         self._has_been_ready = False
 
@@ -107,6 +117,7 @@ class RiggBot(commands.Bot):
         self.settings = settings
         setup_logging(settings.logging, self.base_dir)
         self.guild_store.reload()
+        self.flag_store.reload()
         await self.translation.replace_providers(build_providers(settings, self.secrets))
         self.dispatch('riggbot_reload')     # cogs with their own caches listen for this
         for warning in settings.warnings:

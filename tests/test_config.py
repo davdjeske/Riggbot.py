@@ -26,8 +26,7 @@ class TestDefaults:
 
     def test_is_this_true_defaults_are_unchanged(self):
         itt = Settings().responses.is_this_true
-        assert itt.phrases == ['riggbot is this true']
-        assert itt.match_mention is True
+        assert itt.phrases == ['riggbot is this true', '{mention} is this true']
         assert itt.answers == ['Yes', 'No', 'Israel']
 
 
