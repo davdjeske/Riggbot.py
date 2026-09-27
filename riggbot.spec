@@ -1,28 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
+# One-file PyInstaller build:  pyinstaller riggbot.spec
+#
+# The exe looks for .env, config.json, data/ and logs/ next to itself.
+# The shipped defaults (riggbot/defaults/) are bundled inside the exe.
 
 import os
 
-# Minimal one-file PyInstaller spec for `riggbot.py`.
-# Keeps the build deterministic while avoiding unnecessary native bundles.
-
-_binaries = []
+from PyInstaller.utils.hooks import collect_submodules
 
 a = Analysis(
-    ['riggbot.py'],
+    ['main.py'],
     pathex=[os.path.abspath('.')],
-    binaries=_binaries,
-    datas=[],
-    hiddenimports=[],
+    binaries=[],
+    datas=[('riggbot/defaults', 'riggbot/defaults')],
+    # Cogs are loaded by name and providers are imported lazily, so list them explicitly.
+    hiddenimports=collect_submodules('riggbot.cogs') + collect_submodules('riggbot.translation'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['pytest'],
     noarchive=False,
     optimize=0,
 )
 pyz = PYZ(a.pure)
 
-# EXE (no COLLECT) produces a one-file bundle when built with PyInstaller.
 exe = EXE(
     pyz,
     a.scripts,

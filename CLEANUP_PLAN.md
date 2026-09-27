@@ -350,7 +350,14 @@ Draft `config.example.json`. The `responses` values shown as `"…"` are today's
 
 Each phase is one or more commits on `mh-riggbot`. Checked boxes are done.
 
-**Transition note:** until Phase 3 is finished, the old bot lives on as `riggbot/legacy.py` (run it with `python -m riggbot.legacy`), and `tests/test_riggbot.py` / `tests/test_characterization.py` test it. When the cogs replace it, port the characterization tests to the cogs and delete the legacy module and its tests. The new entry point is `python main.py` (or `python -m riggbot`).
+**Status (2026-09-27):** all phases are implemented. During the transition the old bot lived on as `riggbot/legacy.py`; it was deleted once the cogs replaced it, and its characterization tests now live in `tests/test_behavior_lock.py`. Run the bot with `python main.py` (or `python -m riggbot`).
+
+**Still to do by hand, outside the code:**
+- [ ] Create `config.json` from `config.example.json`: set `owner_ids` and `latibot.user_id`.
+- [ ] Decide on a DeepL key (`DEEPL_API_KEY`) and whether to self-host LibreTranslate. Without either, googletrans is the only working provider.
+- [ ] After the first start, run `/bots add` for LatiBot on each server where its messages should set off triggers.
+- [ ] Try each feature in Discord once (reactions, `trans` replies, "is this true", `/trigger`, `/bots`, `/langflags`, owner commands).
+- [ ] Update the server's Python to 3.14 and install from `requirements.txt`.
 
 ### Phase 0: Safety net
 - [x] Fix the 2 stale tests (the `\n` after the language arrow).
@@ -383,13 +390,13 @@ Each phase is one or more commits on `mh-riggbot`. Checked boxes are done.
 - [x] `admin` cog: `/ping`, and owner-only `/shutdown`, `/sync` and `/reload`.
 
 ### Phase 4: Tooling and docs
-- [ ] `requirements.txt` (runtime: `discord.py`, `python-dotenv`, `googletrans`, `deepl`, `httpx`) and `requirements-dev.txt`, with versions pinned to known-good releases.
-- [ ] CI: a test job on push and PR using **Python 3.14** (D6). Update the actions to current major versions. Keep the PyInstaller job as manual-dispatch, on a PyInstaller release that supports 3.14.
-- [ ] `riggbot.spec`: new entry point `main.py`, and bundle `riggbot/defaults/`.
-- [ ] `start.bat`: `cd` to the script's own folder and use `.venv` if it exists.
+- [x] `requirements.txt` (runtime: `discord.py`, `python-dotenv`, `googletrans`, `deepl`, `httpx`) and `requirements-dev.txt`, with versions pinned to known-good releases.
+- [x] CI: a test job on push and PR using **Python 3.14** (D6). Update the actions to current major versions. Keep the PyInstaller job as manual-dispatch, on a PyInstaller release that supports 3.14.
+- [x] `riggbot.spec`: new entry point `main.py`, and bundle `riggbot/defaults/`.
+- [x] `start.bat`: `cd` to the script's own folder and use `.venv` if it exists.
 - [x] `.gitignore`: add `config.json`, `data/` and `logs/`; remove `riggbot token.txt`.
-- [ ] `.env.example` holds secrets only.
-- [ ] Rewrite the README:
+- [x] `.env.example` holds secrets only.
+- [x] Rewrite the README:
   - Features, including the deliberate `trans` behavior (C2).
   - Triggers and approved bots.
   - Commands.
@@ -398,15 +405,15 @@ Each phase is one or more commits on `mh-riggbot`. Checked boxes are done.
   - A development section: project layout, running the tests, how to add a cog or command, and the shared building blocks from §3.
 
 ### Phase 5: Test coverage
-- [ ] Config merge order and validation, including the default "is this true" values.
-- [ ] `GuildStore`/`JsonStore`: seeding, per-server isolation, atomic save.
-- [ ] Trigger matching: the three match modes, and approved-bot gating combined with `include_bots`.
-- [ ] `/bots` and `/langflags` validation.
-- [ ] Pagination: page building and the check that only the command's user can flip pages.
-- [ ] Translation service against fake providers: chain fallback, skipping unconfigured providers, breaker, override logic.
-- [ ] Each provider's language-code mapping.
-- [ ] Cog handlers with fake Discord objects.
-- [ ] No test calls a real network service.
+- [x] Config merge order and validation, including the default "is this true" values.
+- [x] `GuildStore`/`JsonStore`: seeding, per-server isolation, atomic save.
+- [x] Trigger matching: the three match modes, and approved-bot gating combined with `include_bots`.
+- [x] `/bots` and `/langflags` validation.
+- [x] Pagination: page building and the check that only the command's user can flip pages.
+- [x] Translation service against fake providers: chain fallback, skipping unconfigured providers, breaker, override logic.
+- [x] Each provider's language-code mapping.
+- [x] Cog handlers with fake Discord objects.
+- [x] No test calls a real network service.
 
 ---
 

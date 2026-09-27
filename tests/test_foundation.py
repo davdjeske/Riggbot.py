@@ -1,6 +1,7 @@
 """Tests for logging format, storage and messaging helpers."""
 import json
 import logging
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -8,7 +9,9 @@ from riggbot.config import LoggingSettings
 from riggbot.log import RiggFormatter, component_name, setup_logging
 from riggbot.messaging import split_message
 from riggbot.storage import GuildStore, JsonStore, read_default
-from riggbot.ui.pagination import build_pages
+from riggbot.ui.pagination import Paginator, build_pages
+
+from .conftest import make_interaction, make_user
 
 
 def make_record(name='riggbot.translation', level=logging.INFO, msg='hello'):
@@ -126,6 +129,29 @@ class TestSplitMessage:
         text = '\n'.join(('word ' * n) for n in range(1, 400))
         assert all(len(c) <= 2000 for c in split_message(text))
         assert ''.join(split_message(text)).replace('\n', '') == text.replace('\n', '')
+
+
+class TestPaginator:
+    async def test_only_the_command_user_can_flip_pages(self):
+        view = Paginator(['a', 'b', 'c'], user_id=1)
+        assert view.previous.disabled and not view.next.disabled
+
+        stranger = make_interaction(user=make_user(user_id=2))
+        assert await view.interaction_check(stranger) is False
+        assert stranger.response.send_message.call_args.kwargs['ephemeral'] is True
+
+        owner = make_interaction(user=make_user(user_id=1))
+        owner.response.edit_message = AsyncMock()
+        assert await view.interaction_check(owner) is True
+        await view.next.callback(owner)
+        assert view.index == 1 and owner.response.edit_message.call_args.kwargs['content'] == 'b\n-# Page 2/3'
+        await view.next.callback(owner)
+        assert view.next.disabled
+
+    async def test_respond_single_page_has_no_buttons(self):
+        interaction = make_interaction()
+        await Paginator.respond(interaction, ['only'])
+        assert 'view' not in interaction.response.send_message.call_args.kwargs
 
 
 class TestBuildPages:

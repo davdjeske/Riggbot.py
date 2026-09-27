@@ -1,13 +1,8 @@
-# Requirements for development and running Riggbot
+# Runtime dependencies (Python 3.14). Versions are known-good; bump deliberately and run the tests.
+discord.py==2.7.1
+python-dotenv==1.2.3
+httpx==0.28.1
 
-# Core dependencies
+# Translation providers
+deepl==1.32.0
 googletrans==4.0.2
-discord.py>=2.2.0
-python-dotenv
-
-# Optional
-pyinstaller>=5.11
-
-# Testing
-pytest>=8.0
-pytest-asyncio>=0.23
