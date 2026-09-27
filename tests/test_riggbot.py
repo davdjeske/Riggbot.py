@@ -152,14 +152,14 @@ class TestTranslateText:
         riggbot.translator = self._make_translator(
             'zh-CN', translated_text='hello')
         result = await riggbot.translate_text('你好', is_manual=False)
-        assert result == 'zh-CN→en: hello'
+        assert result == 'zh-CN→en:\nhello'
 
     # basic translation of foreign text to dest lang, manual
     async def test_manual_translates_foreign_text_to_dest_lang(self):
         riggbot.translator = self._make_translator(
             'ja', translated_text='hello')
         result = await riggbot.translate_text('こんにちは', is_manual=True)
-        assert result == 'ja→en: hello'
+        assert result == 'ja→en:\nhello'
 
     # if already dest lang, returns manual override translation when manual
     async def test_manual_override_when_already_in_dest_lang(self):

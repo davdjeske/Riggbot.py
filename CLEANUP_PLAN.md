@@ -348,12 +348,12 @@ Draft `config.example.json`. The `responses` values shown as `"…"` are today's
 Each phase is one or more commits on `mh-riggbot`. The bot stays runnable at the end of every phase.
 
 ### Phase 0: Safety net
-- [ ] Fix the 2 stale tests (the `\n` after the language arrow).
-- [ ] Add **characterization tests**, written against the current code before anything moves:
+- [x] Fix the 2 stale tests (the `\n` after the language arrow).
+- [x] Add **characterization tests**, written against the current code before anything moves:
   - "is this true": both trigger phrases, only in replies, no answer when the replied-to message is riggbot's, the answer comes from exactly `{Yes, No, Israel}`, and the reply is silent (C1). After the move to config, the same tests run against the **default** config.
   - A `trans` substring in a reply (for example "transport") triggers a translation (C2).
   - The translation output format and the override-language behavior.
-- [ ] These tests move with the code in later phases and must keep passing. They are the proof that C1 and C2 hold.
+- [x] These tests move with the code in later phases and must keep passing. They are the proof that C1 and C2 hold.
 
 ### Phase 1: Foundation (package, config, logging, storage)
 - [ ] Create the `riggbot/` package, `main.py`, `paths.py` and `bot.py`, with a `RiggBot` subclass. Slash-command sync and the self-test run once from `setup_hook` / first ready, not on every `on_ready`.
