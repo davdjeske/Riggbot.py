@@ -5,6 +5,7 @@ import discord
 
 log = logging.getLogger(__name__)
 
+# Discord refuses messages longer than this many characters.
 MESSAGE_LIMIT = 2000
 
 # Never ping @everyone, roles or users from bot output; still show the "replying to" highlight.
@@ -14,23 +15,28 @@ SAFE_MENTIONS = discord.AllowedMentions(everyone=False, users=False, roles=False
 def split_message(text: str, limit: int = MESSAGE_LIMIT) -> list[str]:
     """Split `text` into chunks of at most `limit` characters, breaking between lines where possible."""
     chunks: list[str] = []
-    current: str | None = None
+    current: str | None = None      # the chunk being built up (None = nothing yet)
     for line in text.split('\n'):
         while len(line) > limit:            # a single line longer than the limit: hard split
+            # Finish whatever chunk was in progress, then cut the long line into limit-sized pieces.
             if current is not None:
                 chunks.append(current)
                 current = None
             chunks.append(line[:limit])
             line = line[limit:]
         if current is None:
+            # Start a new chunk with this line.
             current = line
         elif len(current) + 1 + len(line) <= limit:
+            # The line still fits (+1 for the newline between them): add it to the current chunk.
             current += '\n' + line
         else:
+            # It doesn't fit: close the current chunk and start a new one with this line.
             chunks.append(current)
             current = line
     if current is not None:
         chunks.append(current)
+    # Drop chunks that are only whitespace; Discord rejects empty messages.
     return [chunk for chunk in chunks if chunk.strip()]
 
 
@@ -40,6 +46,7 @@ async def send_chunked(channel: discord.abc.Messageable, text: str, *, reply_to:
     """Send `text` to `channel`, split into as many messages as needed.
 
     With `reply_to`, the first message is a reply to it and the rest follow in the channel.
+    `silent=True` sends without a notification sound (Discord's @silent).
     """
     sent = []
     for i, chunk in enumerate(split_message(text)):
@@ -56,6 +63,7 @@ async def reply(message: discord.Message, text: str, **kwargs) -> list[discord.M
 
 
 def is_reply(message: discord.Message) -> bool:
+    """True if `message` was sent as a reply to another message."""
     return message.type == discord.MessageType.reply and message.reference is not None
 
 
@@ -64,11 +72,13 @@ async def resolve_reference(message: discord.Message) -> discord.Message | None:
     reference = message.reference
     if reference is None:
         return None
+    # Discord usually includes the replied-to message ("resolved") with the reply itself.
     resolved = reference.resolved
     if isinstance(resolved, discord.DeletedReferencedMessage):
-        return None
+        return None     # the original was deleted
     if resolved is not None:
         return resolved
+    # Not included: ask Discord for it by ID (one API request).
     if reference.message_id is None:
         return None
     try:
@@ -80,8 +90,13 @@ async def resolve_reference(message: discord.Message) -> discord.Message | None:
 
 async def fetch_reaction_message(bot: discord.Client,
                                  payload: discord.RawReactionActionEvent) -> discord.Message | None:
-    """Fetch the message a raw reaction event is about, with up-to-date reaction counts."""
+    """Fetch the message a raw reaction event is about, with up-to-date reaction counts.
+
+    "Raw" reaction events only carry IDs (they also fire for old messages the bot hasn't seen
+    since starting), so the message itself has to be fetched from Discord.
+    """
     try:
+        # Use the cached channel if the bot has it, otherwise ask Discord for it.
         channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
         return await channel.fetch_message(payload.message_id)
     except discord.HTTPException as e:

@@ -6,13 +6,13 @@ The bot uses Google-style codes everywhere (config, flag map, output): "en", "ja
 
 # Aliases other services use for the same languages.
 _ALIASES = {
-    'zh': 'zh-cn',
-    'zh-hans': 'zh-cn',
-    'zh-hant': 'zh-tw',
+    'zh': 'zh-cn',          # plain "Chinese" means Simplified
+    'zh-hans': 'zh-cn',     # Simplified Chinese
+    'zh-hant': 'zh-tw',     # Traditional Chinese
     'zt': 'zh-tw',
-    'nb': 'no',
-    'iw': 'he',
-    'jw': 'jv',
+    'nb': 'no',             # Norwegian Bokmål
+    'iw': 'he',             # old code for Hebrew
+    'jw': 'jv',             # old code for Javanese
 }
 
 # Languages Google Translate knows (from googletrans.constants.LANGUAGES), used to validate input.
@@ -31,8 +31,10 @@ vec ven vi war wol xh yi yo yua yue zap zh-cn zh-tw zu
 
 def normalize(code: str) -> str:
     """Canonical form of a language code: 'EN' -> 'en', 'zh_cn' / 'ZH-HANS' -> 'zh-CN'."""
+    # Tidy up: trim spaces, use "-" rather than "_", lowercase, and resolve aliases.
     key = code.strip().replace('_', '-').lower()
     key = _ALIASES.get(key, key)
+    # Split "zh-cn" into "zh" and "cn"; codes without a "-" are done.
     lang, _, suffix = key.partition('-')
     if not suffix:
         return lang
@@ -44,8 +46,10 @@ def normalize(code: str) -> str:
 
 
 def same_language(a: str, b: str) -> bool:
+    """True if two codes mean the same language, e.g. 'EN' and 'en'."""
     return normalize(a).lower() == normalize(b).lower()
 
 
 def is_known(code: str) -> bool:
+    """True if `code` is a language code Google Translate knows (used to validate /langflags input)."""
     return normalize(code).lower() in _KNOWN

@@ -17,6 +17,10 @@ __all__ = ['PROVIDERS', 'build_providers', 'TranslationService', 'TranslationPro
            'TranslationError', 'UnsupportedLanguageError', 'ProviderUnavailableError']
 
 
+# Factories: each creates one provider from the settings, or raises ProviderNotConfigured if
+# something it needs is missing. Provider modules are imported inside the factory, so a provider
+# that isn't used doesn't need its package installed.
+
 def _deepl(settings: Settings, secrets: Secrets) -> TranslationProvider:
     if not secrets.deepl_api_key:
         raise ProviderNotConfigured('DEEPL_API_KEY is not set in .env')
@@ -37,6 +41,7 @@ def _libretranslate(settings: Settings, secrets: Secrets) -> TranslationProvider
     return LibreTranslateProvider(url, api_key=secrets.libretranslate_api_key)
 
 
+# The names usable in config.json's `translation.providers`, and the factory for each.
 PROVIDERS: dict[str, Callable[[Settings, Secrets], TranslationProvider]] = {
     'deepl': _deepl,
     'googletrans': _googletrans,
@@ -53,6 +58,7 @@ def build_providers(settings: Settings, secrets: Secrets) -> list[TranslationPro
             log.warning('Unknown translation provider "%s" in config; known providers: %s',
                         name, ', '.join(PROVIDERS))
             continue
+        # A provider that can't be created is left out with a warning; the others still work.
         try:
             providers.append(factory(settings, secrets))
         except ProviderNotConfigured as e:

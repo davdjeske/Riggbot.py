@@ -12,6 +12,7 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class TranslationResult:
+    """What a provider returns. frozen=True: it can't be changed after it's created."""
     text: str
     source_lang: str    # canonical code (see languages.py), detected or as given
     target_lang: str    # canonical code
@@ -35,7 +36,13 @@ class ProviderNotConfigured(Exception):
 
 
 class TranslationProvider(Protocol):
-    name: str
+    """The methods every provider class must have.
+
+    A Protocol is a description, not a base class: a provider doesn't inherit from it, it just
+    needs a `name` and these methods with the same arguments.
+    """
+
+    name: str   # the name used in config.json, e.g. 'deepl'
 
     async def translate(self, text: str, target: str, source: str | None = None) -> TranslationResult:
         """Translate `text` into `target`. With `source=None` the provider detects the language.

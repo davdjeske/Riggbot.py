@@ -15,22 +15,33 @@ from ..ui.pagination import Paginator, build_pages
 
 log = logging.getLogger(__name__)
 
-SECTION = 'approved_bots'
+SECTION = 'approved_bots'       # the key in each server's data file: a list of bot user IDs
 
 
 def approved_bot_ids(store: GuildStore, guild_id: int) -> list[int]:
+    """The approved bots' user IDs for one server (an empty list to start with).
+
+    The triggers cog uses this too, to decide whether a bot's message counts.
+    """
     return store.section(guild_id, SECTION, list)
 
 
+# A GroupCog turns its commands into subcommands: /bots add, /bots remove, /bots list.
+# guild_only: approvals belong to a server, so these can't be used in DMs.
 @app_commands.guild_only()
 class Bots(commands.GroupCog, group_name='bots', group_description='Bots whose messages can set off triggers'):
+    """The /bots commands."""
+
     def __init__(self, bot: RiggBot):
         self.bot = bot
         super().__init__()
 
+    # Note: inside these commands, `bot` is the Discord user picked in the command, and
+    # `self.bot` is riggbot itself.
     @app_commands.command(name='add', description='Let a bot\'s messages set off triggers on this server')
     @app_commands.describe(bot='The bot to approve')
     async def add(self, interaction: discord.Interaction, bot: discord.User) -> None:
+        # Only bot accounts can be approved, and riggbot never answers itself anyway.
         if not bot.bot:
             await interaction.response.send_message(f'{bot.mention} isn\'t a bot.', ephemeral=True)
             return
@@ -41,9 +52,11 @@ class Bots(commands.GroupCog, group_name='bots', group_description='Bots whose m
         if bot.id in approved:
             await interaction.response.send_message(f'{bot.mention} is already approved.', ephemeral=True)
             return
+        # Changing the list changes the server's data; save() writes it to disk.
         approved.append(bot.id)
         await self.bot.guild_store.save(interaction.guild_id)
         log.info('Bot %s (id=%s) approved in guild=%s by %s', bot, bot.id, interaction.guild_id, interaction.user)
+        # The mention shows the bot's name without pinging it.
         await interaction.response.send_message(
             f'Approved {bot.mention}. Triggers that allow approved bots will now respond to it.',
             silent=True, allowed_mentions=discord.AllowedMentions.none())
@@ -64,10 +77,12 @@ class Bots(commands.GroupCog, group_name='bots', group_description='Bots whose m
     @app_commands.command(name='list', description='Show the approved bots on this server')
     async def list_bots(self, interaction: discord.Interaction) -> None:
         approved = approved_bot_ids(self.bot.guild_store, interaction.guild_id)
+        # <@id> shows as the bot's name in Discord; the ID is shown too in case the bot has left.
         pages = build_pages([f'<@{bot_id}> (`{bot_id}`)' for bot_id in approved],
                             title=f'**Approved bots** ({len(approved)})')
         await Paginator.respond(interaction, pages, empty='No bots are approved on this server.')
 
 
 async def setup(bot: RiggBot) -> None:
+    """Called by bot.load_extension() to add this cog to the bot."""
     await bot.add_cog(Bots(bot))

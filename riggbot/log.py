@@ -7,6 +7,9 @@ Every record is one line:
 The component is the logger name without the leading "riggbot." so modules should simply use
 `logging.getLogger(__name__)`. Console output is colored when the terminal supports it; the
 log file gets the same format without colors.
+
+Levels, from most to least detailed: debug, info, warning, error, critical. A handler set to
+"info" shows info and everything above it, but hides debug.
 """
 import logging
 import os
@@ -20,6 +23,7 @@ from .config import LoggingSettings
 # Loggers from libraries, which are kept at `library_level` so they don't drown out the bot's own logs.
 LIBRARY_LOGGERS = ('discord', 'httpx', 'httpcore', 'urllib3', 'deepl', 'hpack', 'asyncio')
 
+# ANSI escape codes: invisible character sequences that tell a terminal to change text color.
 _RESET = '\x1b[0m'
 _GRAY = '\x1b[90m'
 _MAGENTA = '\x1b[35m'
@@ -33,11 +37,14 @@ LEVEL_COLORS = {
 
 
 class RiggFormatter(logging.Formatter):
+    """Turns a log record into riggbot's one-line format, optionally with colors."""
+
     def __init__(self, color: bool = False):
         super().__init__()
         self.color = color
 
     def format(self, record: logging.LogRecord) -> str:
+        # e.g. "2026-09-27 07:32:00.123" (local time, with milliseconds)
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(record.created)) + f'.{int(record.msecs):03d}'
         level = f'[{record.levelname.lower()}]'
         component = f'[{component_name(record.name)}]'
@@ -51,6 +58,7 @@ class RiggFormatter(logging.Formatter):
         else:
             line = f'{timestamp} {level} {component} {message}'
 
+        # Errors logged with a stack trace get it on the following lines.
         if record.exc_info:
             line += '\n' + self.formatException(record.exc_info)
         if record.stack_info:
@@ -59,6 +67,7 @@ class RiggFormatter(logging.Formatter):
 
 
 def component_name(logger_name: str) -> str:
+    """The [component] shown in a log line: 'riggbot.cogs.fun' -> 'cogs.fun'."""
     if logger_name == 'riggbot':
         return 'core'
     return logger_name.removeprefix('riggbot.')
@@ -67,19 +76,25 @@ def component_name(logger_name: str) -> str:
 def setup_logging(settings: LoggingSettings, base_dir: Path) -> None:
     """(Re)configure the root logger. Safe to call again, e.g. after /reload."""
     root = logging.getLogger()
+    # Remove the handlers a previous call added (they're marked with _riggbot), so calling this
+    # again doesn't print every line twice.
     for handler in [h for h in root.handlers if getattr(h, '_riggbot', False)]:
         root.removeHandler(handler)
         handler.close()
 
+    # Turn level names like "INFO" into logging's numeric levels.
     console_level = logging.getLevelName(settings.level)
     file_level = logging.getLevelName(settings.file_level)
 
+    # Handler 1: the console / terminal.
     console = logging.StreamHandler(sys.stderr)
     console.setLevel(console_level)
     console.setFormatter(RiggFormatter(color=_use_color(settings.color, console.stream)))
     console._riggbot = True
     handlers = [console]
 
+    # Handler 2: the log file. It "rotates": when it reaches max_bytes it's renamed to
+    # riggbot.log.1 (older ones to .2, .3, ...) and a fresh file is started.
     log_path = base_dir / settings.file
     file_error = None
     try:
@@ -91,29 +106,36 @@ def setup_logging(settings: LoggingSettings, base_dir: Path) -> None:
         file_handler._riggbot = True
         handlers.append(file_handler)
     except OSError as e:
+        # e.g. no permission to write there. Keep running with console logging only.
         file_error = e
 
     for handler in handlers:
         root.addHandler(handler)
+    # The root logger must let through everything that at least one handler wants to show.
     root.setLevel(min(h.level for h in handlers))
 
+    # Quieten chatty libraries.
     library_level = logging.getLevelName(settings.library_level)
     for name in LIBRARY_LOGGERS:
         logging.getLogger(name).setLevel(library_level)
 
+    # Reported last, so the warning goes through the handlers that were just set up.
     if file_error:
         logging.getLogger(__name__).warning('Could not open log file %s (%s); logging to console only',
                                             log_path, file_error)
 
 
 def _use_color(mode: str, stream) -> bool:
+    """Decide whether console output gets colors (config `logging.color`: auto/always/never)."""
     if mode == 'never':
         return False
     if mode == 'always':
         _enable_windows_ansi()
         return True
+    # "auto": no colors if the user asked for none (NO_COLOR is a common convention)...
     if os.getenv('NO_COLOR'):
         return False
+    # ...or if output isn't going to a real terminal (e.g. redirected into a file).
     if not (hasattr(stream, 'isatty') and stream.isatty()):
         return False
     return _enable_windows_ansi()
@@ -122,8 +144,9 @@ def _use_color(mode: str, stream) -> bool:
 def _enable_windows_ansi() -> bool:
     """Turn on ANSI escape-code support in the Windows console. Returns whether colors will work."""
     if os.name != 'nt':
-        return True
+        return True     # Linux/macOS terminals support colors already
     try:
+        # Ask Windows (through its C API) to interpret color codes in the console.
         import ctypes
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.GetStdHandle(-12)   # STD_ERROR_HANDLE
