@@ -7,6 +7,7 @@ listed in EXTENSIONS. Cogs reach shared services through the bot:
     self.bot.guild_store    per-server JSON data
     self.bot.translation    TranslationService
 """
+import asyncio
 import logging
 import os
 import sys
@@ -22,6 +23,7 @@ from .config import ConfigError, Secrets, Settings
 from .log import setup_logging
 from .messaging import SAFE_MENTIONS
 from .storage import GuildStore
+from .translation import TranslationService, build_providers
 
 log = logging.getLogger(__name__)
 
@@ -43,15 +45,25 @@ class RiggBot(commands.Bot):
         self.base_dir = base_dir
         self.data_dir = base_dir / 'data'
         self.guild_store = GuildStore(self.data_dir / 'guilds')
+        self.translation = TranslationService([], lambda: self.settings.translation)
         self._has_been_ready = False
 
     async def setup_hook(self) -> None:
+        await self.translation.replace_providers(build_providers(self.settings, self.secrets))
+        if self.settings.translation.startup_self_test and self.translation.enabled:
+            # Runs in the background so a slow provider doesn't delay logging in.
+            self._self_test_task = asyncio.create_task(self.translation.self_test(), name='translation-self-test')
+
         self.tree.on_error = self.on_app_command_error
         for extension in EXTENSIONS:
             await self.load_extension(extension)
             log.debug('Loaded %s', extension)
         synced = await self.tree.sync()
         log.info('Synced %d slash commands: %s', len(synced), ', '.join(f'/{c.name}' for c in synced) or '(none)')
+
+    async def close(self) -> None:
+        await self.translation.aclose()
+        await super().close()
 
     async def on_ready(self) -> None:
         if self._has_been_ready:
@@ -95,6 +107,7 @@ class RiggBot(commands.Bot):
         self.settings = settings
         setup_logging(settings.logging, self.base_dir)
         self.guild_store.reload()
+        await self.translation.replace_providers(build_providers(settings, self.secrets))
         self.dispatch('riggbot_reload')     # cogs with their own caches listen for this
         for warning in settings.warnings:
             log.warning(warning)

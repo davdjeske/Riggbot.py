@@ -365,9 +365,9 @@ Each phase is one or more commits on `mh-riggbot`. Checked boxes are done.
 - [x] `checks.py`, `messaging.py`.
 
 ### Phase 2: Translation rework
-- [ ] `translation/` package: interface, language normalization, registry, the three providers, and the service with the provider chain, skipping of unconfigured providers, and the circuit breaker.
+- [x] `translation/` package: interface, language normalization, registry, the three providers, and the service with the provider chain, skipping of unconfigured providers, and the circuit breaker.
 - [ ] Remove auto-translation of embed-bot posts and `get_embeds` polling. Retire `EMBED_BOT_NAME` with a warning if it's set.
-- [ ] `embed_text.py` with the two parser fixes and regression tests.
+- [x] `embed_text.py` with the two parser fixes and regression tests.
 - [ ] Long replies go through `send_chunked`. Give the user a distinct message when every provider fails, instead of "couldn't find anything to translate".
 
 ### Phase 3: Cogs and commands
